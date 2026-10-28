@@ -303,6 +303,7 @@ struct ScrollCatcher: NSViewRepresentable {
         var onSmartMagnify: ((CGPoint) -> Void)?
         var onScrollBegan: (() -> Void)?
         var onSwipe: ((CGFloat) -> Void)?
+        private var zoomEnd: DispatchWorkItem?
 
         // Only wheel, pinch and swipe events are ours; clicks fall through to the SwiftUI views below.
         override func hitTest(_ point: NSPoint) -> NSView? {
@@ -337,6 +338,21 @@ struct ScrollCatcher: NSViewRepresentable {
         override func scrollWheel(with event: NSEvent) {
             switch mode {
             case .picture:
+                // ⌥ or ⌘ + scroll zooms at the pointer (fingers / wheel up = in): for a mouse wheel, and for touch
+                // input that sends no pinch (the Sidecar sidebar has ⌥ and ⌘ keys)
+                if let onPinch, !event.modifierFlags.intersection([.option, .command]).isEmpty {
+                    guard event.momentumPhase.isEmpty else { return }
+                    let k: CGFloat = event.isDirectionInvertedFromDevice ? -1 : 1
+                    let d = event.scrollingDeltaY * k * (event.hasPreciseScrollingDeltas ? 1 : 8)
+                    let p = topLeft(event)
+                    if event.phase.contains(.ended) || event.phase.contains(.cancelled) { zoomEnd?.cancel(); onPinch(0, p, true); return }
+                    if d != 0 { onPinch(d * 0.01, p, false) }
+                    zoomEnd?.cancel()                    // a wheel has no gesture end: finish after a pause
+                    let w = DispatchWorkItem { onPinch(0, p, true) }
+                    zoomEnd = w
+                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.4, execute: w)
+                    return
+                }
                 if event.phase.contains(.began) || event.phase.contains(.mayBegin) { onScrollBegan?() }
                 // trackpads send fine point deltas; a mouse wheel sends a few coarse lines
                 let k: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 12

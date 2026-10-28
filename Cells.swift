@@ -311,6 +311,9 @@ struct DragToAdjust: NSViewRepresentable {
         private var start: NSPoint?, last = NSPoint.zero, dragging = false
 
         override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+        // the window is see-through with full-size content: over a transparent spot (the status bar) a press would
+        // otherwise start moving the window instead of reaching this view
+        override var mouseDownCanMoveWindow: Bool { false }
         override func resetCursorRects() { addCursorRect(bounds, cursor: cursor) }
 
         override func mouseDown(with e: NSEvent) {

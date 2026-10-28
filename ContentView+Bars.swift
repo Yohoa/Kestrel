@@ -15,20 +15,25 @@ extension ContentView {
     /// Also redrawn on its own when the status line or the export progress changes (they don't redraw the window).
     var statusBar: some View { Observing(m.statusState) { _ in statusBarContent } }
 
+    /// Status-bar buttons are small to look at but get a target the size of a fingertip (Sidecar, trackpad).
+    func hitTarget<V: View>(_ v: V, width: CGFloat = 22) -> some View {
+        v.frame(minWidth: width, minHeight: 34).contentShape(Rectangle())
+    }
+
     var statusBarContent: some View {
         HStack(spacing: 9) {
-            Button { m.step(-1) } label: { Image(systemName: "chevron.left") }
+            Button { m.step(-1) } label: { hitTarget(Image(systemName: "chevron.left")) }
                 .buttonStyle(.plain).disabled((m.currentIndex ?? 0) == 0)
             Text(m.currentIndex.map { "\($0 + 1)/\(m.files.count)" } ?? "–/\(m.files.count)")
-                .font(.system(size: 12).monospacedDigit()).frame(minWidth: 58)
-            Button { m.step(1) } label: { Image(systemName: "chevron.right") }
+                .font(.system(size: 12).monospacedDigit()).lineLimit(1).fixedSize().frame(minWidth: 50)
+            Button { m.step(1) } label: { hitTarget(Image(systemName: "chevron.right")) }
                 .buttonStyle(.plain).disabled(m.currentIndex.map { $0 >= m.files.count - 1 } ?? true)
-            Text(m.current?.lastPathComponent ?? "").font(.system(size: 12, design: .monospaced))
-            Text(m.imageSize).font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
+            Text(m.current?.lastPathComponent ?? "").font(.system(size: 12, design: .monospaced)).lineLimit(1).truncationMode(.middle)
+            Text(m.imageSize).font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary).lineLimit(1).fixedSize()
             Divider()
-            Button { m.nudgeExposure(NSEvent.modifierFlags.contains(.shift) ? -1 : -1.0 / 3) } label: { Image(systemName: "minus.square") }.buttonStyle(.plain)
-            Text(String(format: "%+.2f EV", m.exposure)).font(.system(size: 12).monospacedDigit())
-            Button { m.nudgeExposure(NSEvent.modifierFlags.contains(.shift) ? 1 : 1.0 / 3) } label: { Image(systemName: "plus.square") }.buttonStyle(.plain)
+            Button { m.nudgeExposure(NSEvent.modifierFlags.contains(.shift) ? -1 : -1.0 / 3) } label: { hitTarget(Image(systemName: "minus.square")) }.buttonStyle(.plain)
+            Text(String(format: "%+.2f EV", m.exposure)).font(.system(size: 12).monospacedDigit()).lineLimit(1).fixedSize()
+            Button { m.nudgeExposure(NSEvent.modifierFlags.contains(.shift) ? 1 : 1.0 / 3) } label: { hitTarget(Image(systemName: "plus.square")) }.buttonStyle(.plain)
             Menu("\(m.wbIsCustom ? "WB" : "As shot") \(Int(m.temperature))K/\(Int(m.tint))") {
                 ForEach(WBPreset.all) { p in Button(p.name) { m.applyWBPreset(p) } }
                 Divider()
@@ -43,8 +48,11 @@ extension ContentView {
             // follows a pinch or drag live (the zoom state is its own observable)
             Observing(m.zoomState) { _ in indicator(m.zoomLabel, on: m.zoomed) { m.toggleZoom() } }
                 .overlay {
+                    // reaches 14 pt above the bar and a little to the sides: at the window's bottom edge a finger
+                    // (Sidecar) is hard to place on the small label itself
                     DragToAdjust(cursor: .resizeLeftRight, onBegin: {}, onChange: { p, mods in m.dragZoom(p, mods) },
                                  onEnd: { m.dragZoomEnded() }, onClick: { m.toggleZoom() }, onDoubleClick: { m.zoomToFit() })
+                        .padding(.top, -14).padding(.horizontal, -6).padding(.bottom, -4)
                 }
                 .help("Drag left / right to zoom (⌥ finer, ⇧ faster). Click: fit ↔ smart zoom, double-click: fit. ⌘+ / ⌘− step, ⌘1 = 100 %, ⌘0 = fit")
             if m.currentIsSelected {
@@ -87,16 +95,16 @@ extension ContentView {
         return HStack(spacing: 2) {
             ForEach(1...5, id: \.self) { i in
                 Button { m.setRating(i) } label: {
-                    Image(systemName: i <= (p?.rating ?? 0) ? "star.fill" : "star").font(.system(size: 11)).foregroundStyle(.orange)
+                    hitTarget(Image(systemName: i <= (p?.rating ?? 0) ? "star.fill" : "star").font(.system(size: 11)).foregroundStyle(.orange), width: 14)
                 }.buttonStyle(.plain)
             }
             Button { m.setRating(-1) } label: {
-                Image(systemName: p?.isRejected == true ? "xmark.circle.fill" : "xmark.circle").foregroundStyle(.red)
+                hitTarget(Image(systemName: p?.isRejected == true ? "xmark.circle.fill" : "xmark.circle").foregroundStyle(.red), width: 18)
             }.buttonStyle(.plain).help("Reject (X)")
             ForEach(labelNames, id: \.self) { n in
                 Button { m.setLabel(n) } label: {
-                    Circle().fill(labelColor(n)).frame(width: 10, height: 10)
-                        .overlay(Circle().stroke(Color.primary.opacity(p?.label == n ? 1 : 0.15), lineWidth: 2))
+                    hitTarget(Circle().fill(labelColor(n)).frame(width: 10, height: 10)
+                        .overlay(Circle().stroke(Color.primary.opacity(p?.label == n ? 1 : 0.15), lineWidth: 2)), width: 12)
                 }.buttonStyle(.plain)
             }
         }
@@ -105,10 +113,11 @@ extension ContentView {
 
     func indicator(_ text: String, on: Bool, action: @escaping () -> Void) -> some View {
         Button(action: action) {
-            Text(text).font(.system(size: 11, weight: .semibold))
+            Text(text).font(.system(size: 11, weight: .semibold)).lineLimit(1).fixedSize()
                 .padding(.horizontal, 5).padding(.vertical, 1)
                 .background(on ? Color.accentColor : Color.gray.opacity(0.25)).foregroundStyle(on ? Color.white : Color.secondary)
                 .clipShape(RoundedRectangle(cornerRadius: 3))
+                .frame(minHeight: 34).contentShape(Rectangle())     // the target, not the look
         }.buttonStyle(.plain)
     }
 

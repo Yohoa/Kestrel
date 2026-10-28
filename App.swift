@@ -709,7 +709,7 @@ final class Model: ObservableObject {
     }
 
     var exposure: Double {
-        get { Double(currentState.ev) }
+        get { Double(currentState.ev) + 0 }          // + 0: a saved −0 shows as 0
         set { adjust { $0.ev = Float(newValue) } }
     }
     var temperature: Double {
