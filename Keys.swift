@@ -169,7 +169,9 @@ extension Model {
         case ("a", true): autoExposure(scope: current.map { [$0] } ?? [])  // FRV: ⇧A, this photo (Develop ▸ Auto EV for a selection)
         case ("w", false): cycleWB()                                      // FRV: W
         case ("l", false): toggleFavoriteLook(ppID)
-        case ("v", false): filter.enabled.toggle(); status = filter.enabled ? "Filter on" : "Filter off"
+        case ("v", false):
+            filter.enabled.toggle(); status = filter.enabled ? "Filter on" : "Filter off"
+            notify(.filter, status + " · \(files.count) shown", icon: "line.3.horizontal.decrease.circle")
         case ("[", false): stepLook(-1)
         case ("]", false): stepLook(1)
         case ("{", _): stepFavoriteLook(-1)

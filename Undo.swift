@@ -19,6 +19,8 @@ final class UndoStore: ObservableObject {
     @Published private(set) var undoStack: [Item] = []
     @Published private(set) var redoStack: [Item] = []
     private(set) var applying = false
+    /// Called after an undo (false) or redo (true) with the step's label, for the notice below the photo.
+    var onApply: ((String, Bool) -> Void)?
     private let limit = 300
     private let mergeWindow: TimeInterval = 1.5
 
@@ -49,6 +51,7 @@ final class UndoStore: ObservableObject {
         it.undos.reversed().forEach { $0() }
         applying = false
         redoStack.append(it)
+        onApply?(it.label, false)
     }
 
     func redo() {
@@ -59,6 +62,7 @@ final class UndoStore: ObservableObject {
         var again = it
         again.date = .distantPast            // a redone step never merges with the next edit
         undoStack.append(again)
+        onApply?(it.label, true)
     }
 
     /// Opening another folder starts a fresh history.

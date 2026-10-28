@@ -80,6 +80,7 @@ extension ContentView {
                                    onScrollBegan: { m.scrollGestureBegan() },
                                    onSwipe: { m.swipePhoto($0) }))
             .contextMenu { if m.current != nil { pictureMenu } }
+            .overlay(alignment: .bottom) { NoticeView(center: m.notices, place: .picture).padding(.bottom, 8) }
             .onChange(of: geo.size) { _, s in m.viewSize = s }
             .onAppear { m.viewSize = geo.size }
         }

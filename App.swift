@@ -249,6 +249,7 @@ final class Model: ObservableObject {
             guard lookMode != oldValue else { return }
             UserDefaults.standard.set(lookMode.rawValue, forKey: "lookMode")
             if lookMode == .preview || chosenLook == nil { chosenLook = lookKey(ppID) }
+            notify(.lookMode, lookMode.help, icon: lookMode == .preview ? "eye" : lookMode == .apply ? "square.and.pencil" : "photo.on.rectangle")
             syncLookFromState()
             if current != nil { refreshAll() }
         }
@@ -405,6 +406,10 @@ final class Model: ObservableObject {
     var keyMonitor: Any?
     var clickMonitor: Any?
     let undo = UndoStore()
+    let notices = NoticeCenter()
+
+    /// A notice where the action happened (see Notices.swift); the status bar text is set by the caller as before.
+    func notify(_ kind: NoticeKind, _ text: String, icon: String) { notices.post(kind, text, icon: icon) }
     let layoutStore = LayoutStore()
     private var layoutSink: AnyCancellable?
 
@@ -424,6 +429,9 @@ final class Model: ObservableObject {
             .sink { [weak self] _ in self?.objectWillChange.send() }
         installKeyMonitor()
         LocalCache.trim()
+        undo.onApply = { [weak self] label, redo in
+            self?.notify(.undoRedo, (redo ? "Redid " : "Undid ") + label, icon: redo ? "arrow.uturn.forward" : "arrow.uturn.backward")
+        }
         DispatchQueue.main.async { [weak self] in self?.applyTheme() }
         let torn = detachedPanels.compactMap(Panel.init(rawValue:))
         detachedPanels = []
@@ -454,6 +462,8 @@ final class Model: ObservableObject {
         if favoriteLooks.contains(k) { favoriteLooks.remove(k) } else { favoriteLooks.insert(k) }
         UserDefaults.standard.set(Array(favoriteLooks), forKey: "favoriteLooks")
         status = favoriteLooks.contains(k) ? "★ \(look(id).title) added to favourite looks" : "\(look(id).title) removed from favourite looks"
+        notify(.favourite, favoriteLooks.contains(k) ? "\(look(id).title) added to favourites" : "\(look(id).title) removed from favourites",
+               icon: favoriteLooks.contains(k) ? "star.fill" : "star.slash")
     }
 
     func look(_ id: Int) -> PPLook { looks.first { $0.id == id } ?? Looks.builtIn[0] }
@@ -733,9 +743,14 @@ final class Model: ObservableObject {
             let r = Decoded.autoWB(url)
             await MainActor.run {
                 guard let self, self.current == url else { return }
-                guard let r else { self.status = "Auto white balance: not enough mid-tones to measure"; return }
+                guard let r else {
+                    self.status = "Auto white balance: not enough mid-tones to measure"
+                    self.notify(.whiteBalance, "Auto WB: not enough mid-tones to measure", icon: "exclamationmark.triangle")
+                    return
+                }
                 self.editCurrent { $0.temp = r.temp; $0.tint = r.tint }
                 self.status = String(format: "WB: Auto %.0f K / %+.0f", r.temp, r.tint)
+                self.notify(.whiteBalance, String(format: "Auto white balance %.0f K / %+.0f", r.temp, r.tint), icon: "thermometer.sun")
                 self.refreshAll()
             }
         }
@@ -770,6 +785,7 @@ final class Model: ObservableObject {
         ensureRead([c])
         clipboard = currentState
         status = "Copied settings (\(String(format: "%+.2f", currentState.ev)) EV\(currentState.temp.map { ", \(Int($0)) K" } ?? ""))"
+        notify(.copyPaste, status, icon: "doc.on.doc")
     }
 
     func pasteSettings() {
@@ -777,6 +793,7 @@ final class Model: ObservableObject {
         let ts = actionTargets()
         edit(ts) { $0 = c }
         status = "Pasted settings to \(ts.count) photo(s)"
+        notify(.copyPaste, status, icon: "doc.on.clipboard")
         syncLookFromState()
         refreshAll()
     }
@@ -793,6 +810,7 @@ final class Model: ObservableObject {
         guard !targets.isEmpty else { status = "Nothing to copy to: only this photo is selected"; return }
         edit(targets) { $0.temp = t; $0.tint = ti }
         status = String(format: "Copied %.0f K / %+.0f to %d photo(s)", t, ti, targets.count)
+        notify(.whiteBalance, String(format: "White balance %.0f K / %+.0f copied to %d photo(s)", t, ti, targets.count), icon: "thermometer.sun")
     }
 
     func applyCurrentSettings(to scope: [URL]) {
@@ -931,16 +949,8 @@ final class Model: ObservableObject {
         refreshPreview()
         if zoomed { refreshZoom(force: true) }
         let name = looks.first { $0.id == id }?.title ?? "Look"
-        lutNoticeGen += 1
-        let gen = lutNoticeGen
-        withAnimation(.easeOut(duration: 0.15)) { lutNotice = "\(name) → \(c.lastPathComponent)" }
-        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { [weak self] in
-            guard let self, self.lutNoticeGen == gen else { return }
-            withAnimation(.easeIn(duration: 0.3)) { self.lutNotice = nil }
-        }
+        notify(.lookSaved, "\(name) → \(c.lastPathComponent)", icon: "checkmark.circle.fill")
     }
-    @Published private(set) var lutNotice: String?
-    private var lutNoticeGen = 0
 
     /// The look to show for the current photo, by the LUT panel's mode.
     func syncLookFromState() {
@@ -1420,6 +1430,8 @@ final class Model: ObservableObject {
                     undo: { [weak self] in old.forEach { v, us in self?.applyRating(v, to: us) } },
                     redo: { [weak self] in self?.applyRating(value, to: ts) })
         applyRating(value, to: ts)
+        let what = value < 0 ? "Rejected" : value == 0 ? "Rating cleared" : String(repeating: "★", count: value)
+        notify(.rating, what + (ts.count > 1 ? " · \(ts.count) photos" : ""), icon: value < 0 ? "xmark.circle" : "star")
     }
 
     private func applyRating(_ value: Int, to ts: [URL]) {
@@ -1437,6 +1449,7 @@ final class Model: ObservableObject {
                     undo: { [weak self] in old.forEach { v, us in self?.applyLabel(v.isEmpty ? nil : v, to: us) } },
                     redo: { [weak self] in self?.applyLabel(value, to: ts) })
         applyLabel(value, to: ts)
+        notify(.label, (value.map { "\($0) label" } ?? "Label cleared") + (ts.count > 1 ? " · \(ts.count) photos" : ""), icon: "tag")
     }
 
     private func applyLabel(_ value: String?, to ts: [URL]) {
@@ -1499,6 +1512,8 @@ final class Model: ObservableObject {
         removeFromLibrary(gone)
         status = r.failed.isEmpty ? "Moved \(r.raws.count) photo(s) to \(Self.rejectedFolderName)"
             : "Moved \(r.raws.count) to \(Self.rejectedFolderName); not moved: " + r.failed.joined(separator: "; ")
+        notify(.moveRejected, r.failed.isEmpty ? "Moved \(r.raws.count) photo(s) to \(Self.rejectedFolderName) · ⌘Z moves back" : status,
+               icon: r.failed.isEmpty ? "archivebox" : "exclamationmark.triangle")
         guard recordUndo, !r.raws.isEmpty else { return }
         let files = r.files, raws = r.raws
         undo.record("Move to \(Self.rejectedFolderName)", undo: { [weak self] in
@@ -1868,6 +1883,9 @@ final class Model: ObservableObject {
 
     private func applyLUTScan(_ scan: LUTScan, folder: URL, remember doRemember: Bool) {
         let keepKey = lookKey(ppID)
+        // same folder again (reloaded, or a .cube dropped in): name the LUTs that were not there before
+        let before = lutFolder == folder ? Set(lutURLs.values.map(\.path)) : nil
+        let added = before.map { b in scan.urls.values.filter { !b.contains($0.path) }.map { $0.deletingPathExtension().lastPathComponent }.sorted() } ?? []
         luts = scan.looks
         lutURLs = scan.urls
         lutFolder = folder
@@ -1877,6 +1895,15 @@ final class Model: ObservableObject {
         if let k = keepKey, let id = lookID(forKey: k) { ppID = id } else if !looks.contains(where: { $0.id == ppID }) { ppID = 2 }
         batchPPs = batchPPs.filter { id in looks.contains { $0.id == id } }
         status = "\(scan.looks.count) LUT(s) in \(folder.lastPathComponent)" + (scan.skipped.isEmpty ? "" : " — skipped \(scan.skipped.count): \(scan.skipped[0])")
+        if !added.isEmpty {
+            notify(.lutsLoaded, added.count == 1 ? "New LUT: \(added[0])" : "\(added.count) new LUTs: " + added.prefix(3).joined(separator: ", ") + (added.count > 3 ? "…" : ""),
+                   icon: "plus.circle.fill")
+        } else if before == nil {
+            notify(.lutsLoaded, "\(scan.looks.count) LUTs loaded from \(folder.lastPathComponent)" + (scan.skipped.isEmpty ? "" : " · \(scan.skipped.count) skipped"),
+                   icon: "square.grid.3x3")
+        } else if !scan.skipped.isEmpty {
+            notify(.lutsLoaded, "\(scan.skipped.count) LUT file(s) could not be read", icon: "exclamationmark.triangle")
+        }
         if current != nil { refreshAll() }
     }
 
@@ -1902,6 +1929,7 @@ final class Model: ObservableObject {
 
     func setLUTInput(_ space: SceneSpace) {
         guard let url = lutURLs[ppID], let f = lutFolder else { return }
+        notify(.lutInput, "\(url.deletingPathExtension().lastPathComponent) now expects \(space.name)", icon: "camera.filters")
         var m = Self.readLUTInputs(f); m[relativePath(url)] = space.name
         var s = savedLUTInputs
         if Self.writeLUTInputs(m, to: f) { s[url.path] = nil }
@@ -2184,8 +2212,14 @@ final class Model: ObservableObject {
 
     // MARK: overlays
 
-    func toggleOver() { showOver.toggle(); refreshPreview() }
-    func toggleUnder() { showUnder.toggle(); refreshPreview() }
+    func toggleOver() {
+        showOver.toggle(); refreshPreview()
+        notify(.overlay, "Over-exposure overlay " + (showOver ? "on" : "off"), icon: "sun.max.trianglebadge.exclamationmark")
+    }
+    func toggleUnder() {
+        showUnder.toggle(); refreshPreview()
+        notify(.overlay, "Under-exposure overlay " + (showUnder ? "on" : "off"), icon: "moon")
+    }
 
     // MARK: zoom and pan (100 % = one image pixel per screen pixel)
 
@@ -2387,15 +2421,20 @@ final class Model: ObservableObject {
         let g = UUID().uuidString                                   // the whole run is one undo step
         Task.detached(priority: .userInitiated) { [weak self] in
             var done = 0, circles = 0
+            var lastEV: Float?
             for url in scope {
                 guard let r = Metering.autoEVResult(url: url, baseEV: 0, mode: mode) else { continue }
                 done += 1
+                lastEV = r.ev
                 if r.circleMasked { circles += 1 }
                 await MainActor.run { self?.edit([url], group: g) { $0.ev = r.ev } }
             }
+            let single = scope.count == 1 ? lastEV : nil
             await MainActor.run {
                 self?.status = "Auto EV (\(mode.rawValue)) set for \(done) photo(s)."
                     + (circles > 0 ? " Lens corners ignored on \(circles)." : "")
+                let what = single.map { String(format: "Auto exposure %+.1f EV", $0) } ?? "Auto exposure set for \(done) photo(s)"
+                self?.notify(.autoExposure, what + " · \(mode.title)" + (circles > 0 ? " · lens corners ignored" : ""), icon: "plusminus.circle")
                 self?.refreshAll()
             }
         }
@@ -2453,10 +2492,15 @@ final class Model: ObservableObject {
             let cg = dec.render(look).flatMap { Engine.cgImage($0, look) }
             await MainActor.run {
                 guard let self else { return }
-                guard let cg else { self.status = "Could not render \(name)"; return }
+                guard let cg else {
+                    self.status = "Could not render \(name)"
+                    self.notify(.copyPhoto, self.status, icon: "exclamationmark.triangle")
+                    return
+                }
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.writeObjects([NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))])
                 self.status = "Copied the edited \(name) · \(look.title) (\(cg.width) × \(cg.height)) to the clipboard"
+                self.notify(.copyPhoto, "Edited photo copied · \(look.title) · \(cg.width) × \(cg.height)", icon: "doc.on.doc")
             }
         }
     }
@@ -2481,7 +2525,12 @@ final class Model: ObservableObject {
                 }
                 msg = "Saved \(dest.lastPathComponent)"
             } catch { msg = "Failed: \(error.localizedDescription)" }
-            await MainActor.run { self?.exporting = false; self?.status = msg }
+            let ok = msg.hasPrefix("Saved")
+            await MainActor.run {
+                self?.exporting = false; self?.status = msg
+                self?.notify(.export, ok ? "Exported \(dest.lastPathComponent) → \(dest.deletingLastPathComponent().lastPathComponent)/" : msg,
+                             icon: ok ? "checkmark.circle.fill" : "exclamationmark.triangle")
+            }
         }
     }
 
@@ -2549,6 +2598,7 @@ final class Model: ObservableObject {
                 if cancelled { self.status = "Cancelled after \(done) file(s)." }
                 else if failures.isEmpty { self.status = "Done — \(done) file(s) written." }
                 else { self.status = "Finished with \(failures.count) failure(s): \(failures.first ?? "")" }
+                self.notify(.batchExport, self.status, icon: failures.isEmpty && !cancelled ? "checkmark.circle.fill" : "exclamationmark.triangle")
             }
         }
     }

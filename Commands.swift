@@ -83,6 +83,7 @@ extension Model {
         let next = list[(i + delta + list.count) % list.count]
         chooseLook(next.id)
         status = "Look: \(next.title)"
+        notify(.lookStep, "Look: \(next.title)", icon: "camera.filters")
     }
 
     /// { / }: previous / next favourite look.
@@ -93,6 +94,7 @@ extension Model {
         let next = favs[(i + delta + favs.count) % favs.count]
         chooseLook(next.id)
         status = "Favourite look: \(next.title)"
+        notify(.lookStep, "Favourite look: \(next.title)", icon: "star")
     }
 
     /// ⌃1 … ⌃9: favourite look n; ⌃0: Base.

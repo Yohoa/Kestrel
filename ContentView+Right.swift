@@ -148,17 +148,7 @@ extension ContentView {
                 Text(lutFooter).font(.caption2).foregroundStyle(.secondary).padding(.bottom, 6)
             }
             .onDrop(of: [.fileURL], isTargeted: nil) { providers in dropFiles(providers, intoLUTs: true) }
-            .overlay(alignment: .top) {
-                if let n = m.lutNotice {
-                    Label(n, systemImage: "checkmark.circle.fill")
-                        .font(.system(size: 11, weight: .medium)).lineLimit(1).truncationMode(.middle)
-                        .padding(.horizontal, 10).padding(.vertical, 5)
-                        .glassCapsule()
-                        .padding(.top, 6).padding(.horizontal, 8)
-                        .transition(.opacity.combined(with: .move(edge: .top)))
-                        .allowsHitTesting(false)
-                }
-            }
+            .overlay(alignment: .top) { NoticeView(center: m.notices, place: .lut) }
         }
     }
 

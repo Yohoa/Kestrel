@@ -181,6 +181,7 @@ struct SettingsView: View {
                     ForEach(MeteringMode.allCases) { Text($0.title).tag($0) }
                 }
             }
+            NoticeSettings(center: m.notices)
             Section("Export") {
                 HStack {
                     Text("HEIC quality")
