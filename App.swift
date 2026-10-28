@@ -984,7 +984,10 @@ final class Model: ObservableObject {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 let errors = (try? result.get()) ?? ["write failed"]
-                if let e = errors.first { self.status = "Could not save settings to XMP — " + e + (errors.count > 1 ? " (+\(errors.count - 1) more)" : "") }
+                if let e = errors.first {
+                    self.status = "Could not save settings to XMP — " + e + (errors.count > 1 ? " (+\(errors.count - 1) more)" : "")
+                    self.notify(.copyPaste, "Settings not saved: " + e, icon: "exclamationmark.triangle")
+                }
                 if let c = self.current, urls.contains(c) { self.loadXMPPanel() }
             }
         })
@@ -1248,6 +1251,7 @@ final class Model: ObservableObject {
     private func finishLoad(_ urls: [URL], _ scan: ScanResult, recursive rec: Bool, streaming: Bool = false) {
         if scan.photos.isEmpty && scan.sawNonRAWFile {                       // e.g. a JPG or .cube dropped on the picture
             status = "Nothing to open: that is not a RAW file (ARW, RAF, DNG)."
+            notify(.export, status, icon: "exclamationmark.triangle")
             return
         }
         if filter.selectedOnly { filter.selectedOnly = false }     // so clearing the selection below can't recompute mid-reset
@@ -1796,7 +1800,7 @@ final class Model: ObservableObject {
             xmpFields = fields
             xmpIssues = issues
             if let d = sc.develop {
-                xmpDevelopLine = "Saved develop settings: \(String(format: "%+.2f", d.ev)) EV\(d.temp.map { ", \(Int($0)) K" } ?? ", as-shot WB")\(d.look.map { ", look \($0)" } ?? "")"
+                xmpDevelopLine = "Saved develop settings: \(String(format: "%+.2f", d.ev)) EV\(d.temp.map { ", \(Int($0)) K" } ?? ", as-shot WB")\(d.look.map { k in ", look " + (self.lookID(forKey: k).map { self.look($0).title } ?? k) } ?? "")"
             } else { xmpDevelopLine = nil }
             let d = XMPDraft(rating: sc.rating, label: sc.label ?? "",
                              exposure: XMPEdit.value(of: "libraw:Exposure", in: text) ?? "",

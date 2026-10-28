@@ -60,7 +60,7 @@ extension ContentView {
             }
             if m.hasGroup {
                 Text("\(m.selection.count) selected").font(.caption).foregroundStyle(Color.accentColor)
-                    .help("Ratings, labels, ⌘V, Apply to…, Copy WB to… and Export act on these. Esc clears.")
+                    .help("⌘V, Apply to…, Copy WB to… and Export act on these; ratings and labels too in the grid (in single view they act on the photo on screen). Esc clears.")
             }
             Divider()
             if m.exporting {
