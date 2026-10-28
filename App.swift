@@ -2364,6 +2364,14 @@ final class Model: ObservableObject {
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.8, execute: w)
     }
 
+    /// Dragging the status-bar zoom indicator: right zooms in, left out, around the middle of the picture, like a pinch.
+    func dragZoom(_ points: CGFloat, _ mods: NSEvent.ModifierFlags) {
+        let k: CGFloat = mods.contains(.option) ? 0.0015 : mods.contains(.shift) ? 0.02 : 0.006
+        pinch(Double(points * k), at: CGPoint(x: viewSize.width / 2, y: viewSize.height / 2), ended: false)
+    }
+
+    func dragZoomEnded() { pinch(0, at: CGPoint(x: viewSize.width / 2, y: viewSize.height / 2), ended: true) }
+
     /// Double-click / Z / status-bar indicator: fit ↔ smart zoom.
     func toggleZoom(atFit point: CGPoint? = nil) {
         if zoomed { unzoomAnimated() } else { zoom(to: smartZoomScale, atFit: point) }

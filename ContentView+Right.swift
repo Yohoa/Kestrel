@@ -104,8 +104,10 @@ extension ContentView {
     func wbTempField(_ w: CGFloat) -> some View {
         HStack(spacing: 4) {
             Text("Temp").font(.caption).fixedSize()
-            TextField("K", value: Binding(get: { m.temperature.rounded() }, set: { m.temperature = min(max($0, 2000), 12000); m.developChanged() }), format: .number)
-                .textFieldStyle(.roundedBorder).frame(width: w)
+            ValueField(value: $m.temperature, range: 2000...12000, step: 1, dragStep: 50, format: "%.0f", unit: "",
+                       onDragBegin: { m.beginSliderDrag() }, onDragEnd: { m.endSliderDrag(); m.developChanged() },
+                       onReset: { m.resetWB(); m.developChanged() }) { m.developChanged() }
+                .frame(width: max(w, 60))
             Text("K").font(.caption)
         }
     }
@@ -113,8 +115,10 @@ extension ContentView {
     func wbTintField(_ w: CGFloat) -> some View {
         HStack(spacing: 4) {
             Text("Tint").font(.caption).fixedSize()
-            TextField("tint", value: Binding(get: { m.tint.rounded() }, set: { m.tint = min(max($0, -150), 150); m.developChanged() }), format: .number)
-                .textFieldStyle(.roundedBorder).frame(width: w)
+            ValueField(value: $m.tint, range: -150...150, step: 1, dragStep: 1, format: "%+.0f", unit: "",
+                       onDragBegin: { m.beginSliderDrag() }, onDragEnd: { m.endSliderDrag(); m.developChanged() },
+                       onReset: { m.resetWB(); m.developChanged() }) { m.developChanged() }
+                .frame(width: max(w, 60))
         }
     }
 

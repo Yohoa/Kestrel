@@ -215,15 +215,20 @@ struct HoverOverflow<Content: View>: View {
 }
 
 /// A slider's value as text: click it and type a number (the unit is optional), Return or clicking away applies
-/// it, Esc cancels. Out-of-range numbers are clamped.
+/// it, Esc cancels. Out-of-range numbers are clamped. Press on it and drag up (or right) to raise it, down (or
+/// left) to lower it, a `dragStep` every few points; ⌥ is ten times finer, ⇧ ten times coarser. Double-click resets.
 struct ValueField: View {
     @Binding var value: Double
     let range: ClosedRange<Double>
     let step: Double
+    var dragStep: Double? = nil
     let format: String
     let unit: String
+    var onDragBegin: () -> Void = {}
+    var onDragEnd: () -> Void = {}
+    var onReset: (() -> Void)? = nil
     let onCommit: () -> Void
-    final class Box: ObservableObject { @Published var draft = ""; @Published var hovered = false }
+    final class Box: ObservableObject { @Published var draft = ""; @Published var hovered = false; var dragValue = 0.0 }
     @StateObject private var box = Box()
     @FocusState private var focused: Bool
 
@@ -237,13 +242,32 @@ struct ValueField: View {
             .background(RoundedRectangle(cornerRadius: 4).fill(Color.primary.opacity(focused ? 0.12 : (box.hovered ? 0.07 : 0))))
             .overlay(RoundedRectangle(cornerRadius: 4).stroke(Color.accentColor.opacity(focused ? 0.8 : 0)))
             .frame(width: 60)
+            .overlay {
+                // not while typing: then clicks place the text cursor
+                if !focused {
+                    DragToAdjust(onBegin: { box.dragValue = value; onDragBegin() },
+                                 onChange: { points, mods in drag(points, mods) },
+                                 onEnd: { onDragEnd() },
+                                 onClick: { focused = true },
+                                 onDoubleClick: { if let onReset { focused = false; onReset() } })
+                }
+            }
             .onHover { box.hovered = $0 }
-            .help("Click to type a value")
+            .help("Drag up or down to change (⌥ finer, ⇧ faster), click to type" + (onReset != nil ? ", double-click to reset" : ""))
             .onChange(of: focused) { _, f in
                 if f { box.draft = String(format: format, value).replacingOccurrences(of: "+", with: "") } else { commit() }
             }
             .onSubmit { focused = false }
             .onExitCommand { box.draft = ""; focused = false }
+    }
+
+    /// Three points of movement per step.
+    private func drag(_ points: CGFloat, _ mods: NSEvent.ModifierFlags) {
+        let base = dragStep ?? step
+        let s = mods.contains(.option) ? base / 10 : mods.contains(.shift) ? base * 10 : base
+        box.dragValue = min(max(box.dragValue + Double(points) / 3 * s, range.lowerBound), range.upperBound)
+        let v = min(max((box.dragValue / s).rounded() * s, range.lowerBound), range.upperBound)
+        if v != value { value = v }
     }
 
     private func commit() {
@@ -254,6 +278,61 @@ struct ValueField: View {
         guard let v = Double(cleaned) else { return }
         let c = min(max((v / step).rounded() * step, range.lowerBound), range.upperBound)
         if c != value { value = c; onCommit() }
+    }
+}
+
+/// Catches a press on a value field: a drag reports its movement (up and right positive), a press that does not move
+/// is a click, two quick ones a double-click. Mouse, trackpad and a finger or Pencil on a Sidecar iPad all arrive here
+/// as mouse events. Shows the up/down resize pointer over the field.
+struct DragToAdjust: NSViewRepresentable {
+    var cursor: NSCursor = .resizeUpDown
+    var onBegin: () -> Void
+    var onChange: (CGFloat, NSEvent.ModifierFlags) -> Void
+    var onEnd: () -> Void
+    var onClick: () -> Void
+    var onDoubleClick: () -> Void
+
+    func makeNSView(context: Context) -> V { let v = V(); update(v); return v }
+    func updateNSView(_ v: V, context: Context) { update(v) }
+    private func update(_ v: V) {
+        v.onBegin = onBegin; v.onChange = onChange; v.onEnd = onEnd; v.onClick = onClick; v.onDoubleClick = onDoubleClick
+        if v.cursor !== cursor { v.cursor = cursor; v.window?.invalidateCursorRects(for: v) }
+    }
+
+    final class V: NSView {
+        var onBegin: () -> Void = {}
+        var onChange: (CGFloat, NSEvent.ModifierFlags) -> Void = { _, _ in }
+        var onEnd: () -> Void = {}
+        var onClick: () -> Void = {}
+        var onDoubleClick: () -> Void = {}
+        var cursor: NSCursor = .resizeUpDown
+        private var start: NSPoint?, last = NSPoint.zero, dragging = false
+
+        override func acceptsFirstMouse(for event: NSEvent?) -> Bool { true }
+        override func resetCursorRects() { addCursorRect(bounds, cursor: cursor) }
+
+        override func mouseDown(with e: NSEvent) {
+            if e.clickCount >= 2 { start = nil; onDoubleClick(); return }
+            start = e.locationInWindow; last = start!; dragging = false
+        }
+
+        override func mouseDragged(with e: NSEvent) {
+            guard let s = start else { return }
+            let p = e.locationInWindow
+            if !dragging {
+                guard hypot(p.x - s.x, p.y - s.y) >= 3 else { return }      // a wobbly click is still a click
+                dragging = true
+                onBegin()
+            }
+            onChange((p.y - last.y) + (p.x - last.x), e.modifierFlags)       // window coordinates: y grows upwards
+            last = p
+        }
+
+        override func mouseUp(with e: NSEvent) {
+            guard start != nil else { return }
+            start = nil
+            if dragging { dragging = false; onEnd() } else { onClick() }
+        }
     }
 }
 

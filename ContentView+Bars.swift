@@ -40,8 +40,13 @@ extension ContentView {
             Divider()
             indicator("O", on: m.showOver) { m.toggleOver() }
             indicator("U", on: m.showUnder) { m.toggleUnder() }
-            indicator(m.zoomLabel, on: m.zoomed) { m.toggleZoom() }
-                .help("Click: fit ↔ smart zoom. ⌘+ / ⌘− step, ⌘1 = 100 %, ⌘0 = fit")
+            // follows a pinch or drag live (the zoom state is its own observable)
+            Observing(m.zoomState) { _ in indicator(m.zoomLabel, on: m.zoomed) { m.toggleZoom() } }
+                .overlay {
+                    DragToAdjust(cursor: .resizeLeftRight, onBegin: {}, onChange: { p, mods in m.dragZoom(p, mods) },
+                                 onEnd: { m.dragZoomEnded() }, onClick: { m.toggleZoom() }, onDoubleClick: { m.zoomToFit() })
+                }
+                .help("Drag left / right to zoom (⌥ finer, ⇧ faster). Click: fit ↔ smart zoom, double-click: fit. ⌘+ / ⌘− step, ⌘1 = 100 %, ⌘0 = fit")
             if m.currentIsSelected {
                 Text("Sel").font(.caption.bold()).foregroundStyle(.red).help("The photo on screen is part of the selection")
             }

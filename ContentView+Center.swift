@@ -168,10 +168,14 @@ extension ContentView {
                     if m.lutInput(m.ppID) != nil { LUTInputLine(m: m, lookID: m.ppID) }
                     Spacer()
                 }
-                adjustRow("Exposure", value: $m.exposure, range: -4...7, step: 0.1, typedStep: 0.01, format: "%+.2f", unit: " EV")
-                adjustRow("Temp", value: $m.temperature, range: 2500...10000, step: 50, typedStep: 10, format: "%.0f", unit: " K")
-                adjustRow("Tint", value: $m.tint, range: -50...50, step: 1, format: "%+.0f")
-                adjustRow("Contrast", value: $m.contrast, range: -5...5, step: 0.1, format: "%+.1f")
+                adjustRow("Exposure", value: $m.exposure, range: -4...7, step: 0.1, typedStep: 0.01, format: "%+.2f", unit: " EV",
+                          reset: { m.editCurrent { $0.ev = 0 }; m.developChanged() })
+                adjustRow("Temp", value: $m.temperature, range: 2500...10000, step: 50, typedStep: 10, format: "%.0f", unit: " K",
+                          reset: { m.resetWB(); m.developChanged() })
+                adjustRow("Tint", value: $m.tint, range: -50...50, step: 1, format: "%+.0f",
+                          reset: { m.resetWB(); m.developChanged() })
+                adjustRow("Contrast", value: $m.contrast, range: -5...5, step: 0.1, format: "%+.1f",
+                          reset: { m.editCurrent { $0.contrast = 0 }; m.developChanged() })
                     .help("FastRawViewer contrast grade −5…+5 in 0.1 steps; K / ⇧K move ½ grade")
                 HStack {
                     Toggle("Highlight recovery", isOn: $m.highlightRecovery).font(.caption)
@@ -192,7 +196,7 @@ extension ContentView {
     /// the value next to it can be clicked and typed into.
     /// `typedStep`: a typed value may be finer than the slider's step (Auto EV gives e.g. −1.27).
     func adjustRow(_ title: String, value: Binding<Double>, range: ClosedRange<Double>, step: Double, typedStep: Double? = nil,
-                   format: String, unit: String = "") -> some View {
+                   format: String, unit: String = "", reset: (() -> Void)? = nil) -> some View {
         let stepped = Binding(get: { value.wrappedValue }, set: { value.wrappedValue = ($0 / step).rounded() * step })
         return HStack(spacing: 6) {
             Text(title).font(.caption).frame(width: 52, alignment: .leading)
@@ -200,7 +204,9 @@ extension ContentView {
                 if editing { m.beginSliderDrag() } else { m.endSliderDrag(); m.developChanged() }   // live while dragging
             }
             .controlSize(.small)
-            ValueField(value: value, range: range, step: typedStep ?? step, format: format, unit: unit) { m.developChanged() }
+            ValueField(value: value, range: range, step: typedStep ?? step, dragStep: step, format: format, unit: unit,
+                       onDragBegin: { m.beginSliderDrag() }, onDragEnd: { m.endSliderDrag(); m.developChanged() },
+                       onReset: reset) { m.developChanged() }
         }
     }
 
