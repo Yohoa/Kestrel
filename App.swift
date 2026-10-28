@@ -1550,6 +1550,18 @@ final class Model: ObservableObject {
 
     private var scrollAccum: CGFloat = 0
     private var lastScrollStep = Date.distantPast
+    private var swipeAccum: CGFloat = 0
+    private var swipeStepped = false                    // this horizontal swipe has turned its photo already
+    private var lastSwipeStep = Date.distantPast
+
+    /// A new trackpad gesture began (fingers down): the next horizontal swipe may turn a photo again.
+    func scrollGestureBegan() { swipeAccum = 0; swipeStepped = false }
+
+    /// A swipe gesture (Magic Mouse, three fingers, or two with "swipe between pages"): one photo per swipe.
+    func swipePhoto(_ deltaX: CGFloat) {
+        guard !zoomed, deltaX != 0 else { return }
+        step(deltaX > 0 ? 1 : -1)
+    }
 
     /// Wheel / trackpad over the picture: pans when zoomed, otherwise steps through the photos.
     func handleScroll(dx: CGFloat, dy: CGFloat, momentum: Bool = false) {
@@ -1557,6 +1569,16 @@ final class Model: ObservableObject {
         if zoomed {
             guard !unzooming else { return }      // a two-finger double-tap also sends empty scroll events
             zoomState.offset = clampedPan(CGSize(width: panOffset.width + dx, height: panOffset.height + dy))
+            return
+        }
+        // A sideways two-finger swipe turns one photo per gesture, like paging (fingers to the left: next).
+        // Devices without gesture phases (a tilting mouse wheel) may turn again after a pause.
+        if abs(dx) > abs(dy) {
+            if swipeStepped, Date().timeIntervalSince(lastSwipeStep) < 0.6 { return }
+            swipeAccum += dx
+            guard abs(swipeAccum) >= 24 else { return }
+            step(swipeAccum < 0 ? 1 : -1)
+            swipeAccum = 0; swipeStepped = true; lastSwipeStep = Date()
             return
         }
         scrollAccum += dy
@@ -2397,6 +2419,42 @@ final class Model: ObservableObject {
         p.nameFieldStringValue = "\(stem)_\(look.fileName).heic"
         p.directoryURL = customOut ?? url.deletingLastPathComponent()
         guard p.runModal() == .OK, let dest = p.url else { return }
+        export(url, look: look, to: dest)
+    }
+
+    /// One click: the photo on screen with its look, into the folder the Export settings name, no dialog.
+    func quickExport() {
+        guard let url = current, !exporting else { return }
+        ensureRead([url])
+        let look = self.look
+        let dir = outputMode.directory(for: url, custom: customOut, look: look, group: groupByLook)
+        do { try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true) }
+        catch { status = "Can't write to \(dir.path): \(error.localizedDescription)"; return }
+        export(url, look: look, to: dir.appendingPathComponent("\(url.deletingPathExtension().lastPathComponent)_\(look.fileName).heic"))
+    }
+
+    /// The photo on screen, rendered full size with its look, on the clipboard (to paste into a message or document).
+    func copyImageToClipboard() {
+        guard let url = current else { return }
+        ensureRead([url])
+        let look = self.look
+        let dec = Decoded(url: url, adj: state(for: url).adjust, scale: 1)
+        let name = url.deletingPathExtension().lastPathComponent
+        status = "Rendering \(name) for the clipboard…"
+        Task.detached(priority: .userInitiated) { [weak self] in
+            let cg = dec.render(look).flatMap { Engine.cgImage($0, look) }
+            await MainActor.run {
+                guard let self else { return }
+                guard let cg else { self.status = "Could not render \(name)"; return }
+                NSPasteboard.general.clearContents()
+                NSPasteboard.general.writeObjects([NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))])
+                self.status = "Copied \(name) · \(look.title) (\(cg.width) × \(cg.height)) to the clipboard"
+            }
+        }
+    }
+
+    private func export(_ url: URL, look: PPLook, to dest: URL) {
+        let stem = url.deletingPathExtension().lastPathComponent
         exporting = true
         progress = 0
         status = "Exporting \(stem) · \(look.title)…"

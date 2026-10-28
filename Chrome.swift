@@ -281,6 +281,9 @@ struct ScrollCatcher: NSViewRepresentable {
     /// `.picture`: trackpad pinch (magnification, point from the top-left, ended) and two-finger double-tap.
     var onPinch: ((CGFloat, CGPoint, Bool) -> Void)? = nil
     var onSmartMagnify: ((CGPoint) -> Void)? = nil
+    /// `.picture`: fingers down for a new scroll gesture, and swipe events (Magic Mouse, three-finger swipe).
+    var onScrollBegan: (() -> Void)? = nil
+    var onSwipe: ((CGFloat) -> Void)? = nil
 
     func makeNSView(context: Context) -> CatcherView {
         let v = CatcherView()
@@ -290,6 +293,7 @@ struct ScrollCatcher: NSViewRepresentable {
 
     func updateNSView(_ v: CatcherView, context: Context) {
         v.mode = mode; v.onDelta = onDelta; v.onPinch = onPinch; v.onSmartMagnify = onSmartMagnify
+        v.onScrollBegan = onScrollBegan; v.onSwipe = onSwipe
     }
 
     final class CatcherView: NSView {
@@ -297,12 +301,14 @@ struct ScrollCatcher: NSViewRepresentable {
         var onDelta: ((CGFloat, CGFloat, Bool) -> Void)?
         var onPinch: ((CGFloat, CGPoint, Bool) -> Void)?
         var onSmartMagnify: ((CGPoint) -> Void)?
+        var onScrollBegan: (() -> Void)?
+        var onSwipe: ((CGFloat) -> Void)?
 
-        // Only wheel and pinch events are ours; clicks fall through to the SwiftUI views below.
+        // Only wheel, pinch and swipe events are ours; clicks fall through to the SwiftUI views below.
         override func hitTest(_ point: NSPoint) -> NSView? {
             switch NSApp.currentEvent?.type {
             case .scrollWheel: return self
-            case .magnify, .smartMagnify: return mode == .picture ? self : nil
+            case .magnify, .smartMagnify, .swipe: return mode == .picture ? self : nil
             default: return nil
             }
         }
@@ -318,6 +324,11 @@ struct ScrollCatcher: NSViewRepresentable {
             onPinch(ended ? 0 : event.magnification, topLeft(event), ended)
         }
 
+        override func swipe(with event: NSEvent) {
+            guard mode == .picture, let onSwipe else { return super.swipe(with: event) }
+            onSwipe(event.deltaX)
+        }
+
         override func smartMagnify(with event: NSEvent) {
             guard mode == .picture, let onSmartMagnify else { return super.smartMagnify(with: event) }
             onSmartMagnify(topLeft(event))
@@ -326,6 +337,7 @@ struct ScrollCatcher: NSViewRepresentable {
         override func scrollWheel(with event: NSEvent) {
             switch mode {
             case .picture:
+                if event.phase.contains(.began) || event.phase.contains(.mayBegin) { onScrollBegan?() }
                 // trackpads send fine point deltas; a mouse wheel sends a few coarse lines
                 let k: CGFloat = event.hasPreciseScrollingDeltas ? 1 : 12
                 onDelta?(event.scrollingDeltaX * k, event.scrollingDeltaY * k, !event.momentumPhase.isEmpty)

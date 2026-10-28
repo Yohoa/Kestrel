@@ -72,10 +72,47 @@ extension ContentView {
             .overlay(ScrollCatcher(mode: .picture,
                                    onDelta: { dx, dy, momentum in m.handleScroll(dx: dx, dy: dy, momentum: momentum) },
                                    onPinch: { mag, p, ended in m.pinch(Double(mag), at: p, ended: ended) },
-                                   onSmartMagnify: { p in if m.zoomed { m.toggleZoom() } else { m.toggleZoom(atFit: p) } }))
+                                   onSmartMagnify: { p in if m.zoomed { m.toggleZoom() } else { m.toggleZoom(atFit: p) } },
+                                   onScrollBegan: { m.scrollGestureBegan() },
+                                   onSwipe: { m.swipePhoto($0) }))
+            .contextMenu { if m.current != nil { pictureMenu } }
             .onChange(of: geo.size) { _, s in m.viewSize = s }
             .onAppear { m.viewSize = geo.size }
         }
+    }
+
+    /// Right-click on the photo. Marking first (what culling is about), then the automatic fixes, getting the picture
+    /// out, undo, and last the file itself. Ratings, labels and Move act on what keys act on (the group in the grid).
+    @ViewBuilder var pictureMenu: some View {
+        let ts = m.metadataTargets()
+        Menu {
+            ForEach((1...5).reversed(), id: \.self) { i in Button(String(repeating: "★", count: i)) { m.setRating(i, on: ts) } }
+            Divider()
+            Button("No rating") { m.setRating(0, on: ts) }
+            Button("Reject (X)") { m.setRating(-1, on: ts) }
+        } label: { Label("Rating", systemImage: "star") }
+        Menu {
+            ForEach(labelNames, id: \.self) { n in Button(n) { m.setLabel(n, on: ts) } }
+            Divider()
+            Button("No label") { m.setLabel(nil, on: ts) }
+        } label: { Label("Label", systemImage: "tag") }
+        Divider()
+        Button { m.autoExposure(scope: m.current.map { [$0] } ?? []) } label: { Label("Auto Exposure", systemImage: "plusminus.circle") }
+        Button { m.applyAutoWB() } label: { Label("Auto White Balance", systemImage: "thermometer.sun") }
+        Divider()
+        Button { m.quickExport() } label: { Label("Export", systemImage: "square.and.arrow.up") }.disabled(m.exporting)
+        Button("Export As…") { m.exportCurrent() }.disabled(m.exporting)
+        Button { m.copyImageToClipboard() } label: { Label("Copy Image", systemImage: "doc.on.doc") }
+        Divider()
+        Button { m.undo.undo() } label: { Label(m.undo.undoTitle.map { "Undo \($0)" } ?? "Undo", systemImage: "arrow.uturn.backward") }
+            .disabled(m.undo.undoTitle == nil)
+        Button { m.undo.redo() } label: { Label(m.undo.redoTitle.map { "Redo \($0)" } ?? "Redo", systemImage: "arrow.uturn.forward") }
+            .disabled(m.undo.redoTitle == nil)
+        Divider()
+        Button { m.moveToRejected() } label: {
+            Label(ts.count > 1 ? "Move \(ts.count) Photos to \(Model.rejectedFolderName)" : "Move to \(Model.rejectedFolderName)", systemImage: "archivebox")
+        }
+        Button("Reveal in Finder") { if let c = m.current { m.revealInFinder(c) } }
     }
 
     @ViewBuilder var previewContent: some View {
