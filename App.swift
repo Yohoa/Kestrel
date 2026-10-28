@@ -269,8 +269,9 @@ final class Model: ObservableObject {
     @Published var gridColumns = 4
 
     // Look
-    @Published var ppID = 2
-    @Published var lookMode = LookMode(rawValue: UserDefaults.standard.string(forKey: "lookMode") ?? "") ?? .apply {
+    @Published var ppID = 0                         // Base: what the camera recorded, no look added
+    // Preview by default: trying looks must not write sidecars; saving is a double-click or "Save to This Photo"
+    @Published var lookMode = LookMode(rawValue: UserDefaults.standard.string(forKey: "lookMode") ?? "") ?? .preview {
         didSet {
             guard lookMode != oldValue else { return }
             UserDefaults.standard.set(lookMode.rawValue, forKey: "lookMode")
@@ -282,7 +283,22 @@ final class Model: ObservableObject {
     }
     /// The look last chosen in the panel, by key: look ids are list positions and change when the LUT folder reloads.
     private var chosenLook: String?
-    @Published var batchPPs: Set<Int> = [2]
+    /// The looks ticked for a batch export (when not exporting each photo's own look). Saved by look key: look ids are
+    /// list positions, which change when the LUT folder does.
+    @Published var batchPPs: Set<Int> = [2] {
+        didSet { if !restoringBatchLooks { UserDefaults.standard.set(batchPPs.compactMap(lookKey).sorted(), forKey: "exportLooks") } }
+    }
+    private var restoringBatchLooks = false
+    func restoreBatchLooks() {
+        guard let keys = UserDefaults.standard.stringArray(forKey: "exportLooks") else { return }
+        restoringBatchLooks = true
+        batchPPs = Set(keys.compactMap(lookID(forKey:)))
+        restoringBatchLooks = false
+    }
+    /// Batch export: each photo with the look saved for it (else the current one), instead of the ticked looks.
+    @Published var exportOwnLook = UserDefaults.standard.object(forKey: "exportOwnLook") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(exportOwnLook, forKey: "exportOwnLook") }
+    }
     @Published var favoriteLooks: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "favoriteLooks") ?? [])
     @Published var favoriteLooksOnly = false
 
@@ -361,11 +377,22 @@ final class Model: ObservableObject {
     @Published var xmpDevelopLine: String?
 
     // Export
-    @Published var copySidecar = true
-    @Published var quality = 0.85
-    @Published var customOut: URL?
-    @Published var outputMode: OutputMode = .subfolder
-    @Published var groupByLook = false
+    // Export settings, kept across launches like the rest
+    @Published var copySidecar = UserDefaults.standard.object(forKey: "exportCopySidecar") as? Bool ?? true {
+        didSet { UserDefaults.standard.set(copySidecar, forKey: "exportCopySidecar") }
+    }
+    @Published var quality = UserDefaults.standard.object(forKey: "exportQuality") as? Double ?? 0.85 {
+        didSet { UserDefaults.standard.set(quality, forKey: "exportQuality") }
+    }
+    @Published var customOut: URL? = UserDefaults.standard.string(forKey: "exportFolder").map { URL(fileURLWithPath: $0) } {
+        didSet { UserDefaults.standard.set(customOut?.path, forKey: "exportFolder") }
+    }
+    @Published var outputMode = OutputMode(rawValue: UserDefaults.standard.string(forKey: "exportMode") ?? "") ?? .subfolder {
+        didSet { UserDefaults.standard.set(outputMode.rawValue, forKey: "exportMode") }
+    }
+    @Published var groupByLook = UserDefaults.standard.bool(forKey: "exportGroupByLook") {
+        didSet { UserDefaults.standard.set(groupByLook, forKey: "exportGroupByLook") }
+    }
     /// Status line and export progress live in `statusState`, which only the status bar observes: they change
     /// per exported photo and on many actions, and must not redraw the whole window each time.
     let statusState = StatusState()
@@ -459,6 +486,7 @@ final class Model: ObservableObject {
         layoutSink = Publishers.Merge3(layoutStore.$leftCollapsed.map { _ in () }, layoutStore.$rightCollapsed.map { _ in () },
                                        layoutStore.$presetNames.map { _ in () })
             .sink { [weak self] _ in self?.objectWillChange.send() }
+        restoreBatchLooks()                          // the built-in ones now, LUTs again when their folder has loaded
         installKeyMonitor()
         LocalCache.trim()
         undo.onApply = { [weak self] label, redo in
@@ -687,15 +715,16 @@ final class Model: ObservableObject {
             if s.ev != b.ev { fields.insert("ev") }
             if s.temp != b.temp || s.tint != b.tint { fields.insert("wb") }
             if s.contrast != b.contrast { fields.insert("contrast") }
-            if s.hl != b.hl || s.look != b.look { fields.insert("other") }
+            if s.look != b.look { fields.insert("look") }
+            if s.hl != b.hl { fields.insert("other") }
         }
         guard !after.isEmpty else { return }
         scheduleSave()
-        if fields.contains("other") { recomputeViewKeepingCurrent() }        // With / Without LUT counts
+        if fields.contains("other") || fields.contains("look") { recomputeViewKeepingCurrent() }   // With / Without LUT counts
         // A slider drag is one step: continuous controls on the same photos merge; looks, paste etc. never do.
         let f = fields.sorted().joined(separator: ",")
         let key = ["ev", "wb", "contrast"].contains(f) ? "develop:\(f):" + after.keys.map(\.path).sorted().joined(separator: "|") : nil
-        let label = ["ev": "Exposure", "wb": "White Balance", "contrast": "Contrast"][f] ?? "Develop"
+        let label = ["ev": "Exposure", "wb": "White Balance", "contrast": "Contrast", "look": "Look"][f] ?? "Develop"
         undo.record(label, key: key, group: group,
                     undo: { [weak self] in self?.restoreStates(before) }, redo: { [weak self] in self?.restoreStates(after) })
     }
@@ -1989,7 +2018,8 @@ final class Model: ObservableObject {
         else { UserDefaults.standard.set(folder.path, forKey: Self.lutFolderKey) }
         if doRemember { remember(&recentLUTFolders, Self.lutFoldersKey, [folder]) }
         if let k = keepKey, let id = lookID(forKey: k) { ppID = id } else if !looks.contains(where: { $0.id == ppID }) { ppID = 2 }
-        batchPPs = batchPPs.filter { id in looks.contains { $0.id == id } }
+        if UserDefaults.standard.stringArray(forKey: "exportLooks") != nil { restoreBatchLooks() }
+        else { batchPPs = batchPPs.filter { id in looks.contains { $0.id == id } } }
         status = "\(scan.looks.count) LUT(s) in \(folder.lastPathComponent)" + (scan.skipped.isEmpty ? "" : " — skipped \(scan.skipped.count): \(scan.skipped[0])")
         if !added.isEmpty {
             notify(.lutsLoaded, added.count == 1 ? "New LUT: \(added[0])" : "\(added.count) new LUTs: " + added.prefix(3).joined(separator: ", ") + (added.count > 3 ? "…" : ""),
@@ -2665,15 +2695,42 @@ final class Model: ObservableObject {
         }
     }
 
+    /// The look a photo is exported with in "each photo's own look": the one saved for it, else the current one.
+    func ownLook(_ u: URL) -> PPLook {
+        if let k = state(for: u).look, let id = lookID(forKey: k) { return look(id) }
+        return look
+    }
+
+    /// What a batch export writes for each photo: its own look, or every ticked look.
+    func exportLooks(for jobs: [URL]) -> [URL: [PPLook]] {
+        if exportOwnLook { return Dictionary(uniqueKeysWithValues: jobs.map { ($0, [ownLook($0)]) }) }
+        let ticked = looks.filter { batchPPs.contains($0.id) }
+        return Dictionary(uniqueKeysWithValues: jobs.map { ($0, ticked) })
+    }
+
+    /// The batch export button's title, e.g. "Export 120 shown" or "Export 12 selected × 3 looks".
+    var exportAllTitle: String {
+        let n = exportTargets.count
+        return exportOwnLook ? "Export \(n) \(exportScopeText)" : "Export \(n) \(exportScopeText) × \(batchPPs.count) look\(batchPPs.count == 1 ? "" : "s")"
+    }
+
     func exportAll() {
+        guard !exporting else { return }
         ensureRead(selection.isEmpty ? files : files.filter(selection.contains))   // so unread rejects stay out
         let jobs = exportTargets
-        let looks = self.looks.filter { batchPPs.contains($0.id) }
-        guard !jobs.isEmpty, !looks.isEmpty, !exporting else { return }
-        if let problem = outputProblem(for: jobs) { status = problem; return }
+        guard !jobs.isEmpty else {
+            status = "Nothing to export: no \(exportScopeText) photos that aren't rejected"
+            notify(.batchExport, status, icon: "exclamationmark.triangle"); return
+        }
+        let looksFor = exportLooks(for: jobs)
+        guard looksFor.values.contains(where: { !$0.isEmpty }) else {
+            status = "No look ticked for export: tick looks in the LUT panel, or choose “Each photo's own look” in Export settings"
+            notify(.batchExport, status, icon: "exclamationmark.triangle"); return
+        }
+        if let problem = outputProblem(for: looksFor) { status = problem; notify(.batchExport, problem, icon: "exclamationmark.triangle"); return }
         exporting = true
         progress = 0
-        let total = Double(jobs.count * looks.count)
+        let total = Double(looksFor.values.reduce(0) { $0 + $1.count })
         let adjs = Dictionary(uniqueKeysWithValues: jobs.map { ($0, state(for: $0).adjust) })
         let copyXMP = copySidecar
         let q = Float(quality)
@@ -2683,14 +2740,14 @@ final class Model: ObservableObject {
         // Up to 3 photos in flight: the HEVC encoder and the GPU overlap (2.5× over one at a time, ~400 MB each).
         let width = max(1, min(3, ProcessInfo.processInfo.activeProcessorCount / 3))
         exportTask = Task.detached(priority: .userInitiated) { [weak self] in
-            /// One photo, every ticked look. Returns (files written or failed, failure messages).
+            /// One photo, each of its looks. Returns (files written or failed, failure messages).
             @Sendable func exportPhoto(_ url: URL) -> (Int, [String]) {
                 autoreleasepool {
                     let sc = copyXMP ? Sidecar.load(for: url) : nil
                     let dec = Decoded(url: url, adj: adjs[url] ?? Adjust(), scale: 1)    // lazy: one decode graph per look
                     let stem = url.deletingPathExtension().lastPathComponent
                     var n = 0, fails: [String] = []
-                    for look in looks {
+                    for look in looksFor[url] ?? [] {
                         if Task.isCancelled { break }
                         let dir = mode.directory(for: url, custom: out, look: look, group: group)
                         try? FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
@@ -2735,11 +2792,10 @@ final class Model: ObservableObject {
     }
 
     /// Checks every destination folder can be created and written before a long batch starts.
-    private func outputProblem(for jobs: [URL]) -> String? {
+    private func outputProblem(for looksFor: [URL: [PPLook]]) -> String? {
         let fm = FileManager.default
-        let looks = self.looks.filter { batchPPs.contains($0.id) }
         var checked: Set<URL> = []
-        for u in jobs {
+        for (u, looks) in looksFor {
             for l in looks {
                 let d = outputMode.directory(for: u, custom: customOut, look: l, group: groupByLook)
                 guard checked.insert(d).inserted else { continue }

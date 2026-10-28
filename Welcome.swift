@@ -42,7 +42,7 @@ struct WelcomeView: View {
                 feature("folder", "Open a folder", "Open… or drop a folder on the window. Folders, network shares and drives are in the Folders panel.")
                 feature("star", "Cull", "Rate, label and reject from the keyboard. Everything is saved in .xmp sidecars that Lightroom and FastRawViewer read too.")
                 feature("camera.filters", "Grade", "Exposure, white balance and contrast in Develop; 11 picture-profile looks and 27 film LUTs are built in.")
-                feature("square.and.arrow.up", "Export", "10-bit HEIC, one photo (right-click ▸ Export) or many at once; ⌘C copies the edited photo.")
+                feature("square.and.arrow.up", "Export", "10-bit HEIC: right-click ▸ Quick Export for one photo, the Export button for many, each with its own look; ⌘C copies the edited photo.")
             }
             Divider()
             Text("The keys you will use most").font(.subheadline.bold())
@@ -163,7 +163,7 @@ enum Tips {
         ("cursorarrow.click.2", "Right-click the photo",
          "Rating, label, auto exposure and white balance, one-click export, copy, undo and Move to _Rejected are all on the photo's right-click menu."),
         ("square.and.arrow.up", "Export in one click",
-         "Right-click ▸ Export saves a 10-bit HEIC where the Export settings say (a HEIC folder next to the RAW by default). Rejected photos are never batch-exported."),
+         "Right-click ▸ Quick Export saves a 10-bit HEIC where the Export settings say (a HEIC folder next to the RAW by default); Export As… asks where. The Export button exports many, each with its own look; rejected photos never."),
         ("macwindow.on.rectangle", "Two folders at once",
          "⌘N opens another Kestrel window of its own, for a second folder."),
         ("bell.badge", "Notices",

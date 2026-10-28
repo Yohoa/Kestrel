@@ -195,8 +195,9 @@ struct PanelCommands: Commands {
             Button("Move to \(Model.rejectedFolderName)") { m.moveToRejected() }
                 .keyboardShortcut(.delete, modifiers: [.command, .shift])          // FastRawViewer: ⇧⌘⌫
             Divider()
-            Button("Export This Photo…") { m.exportCurrent() }.keyboardShortcut("e", modifiers: .command)
-            Button("Export \(m.exportTargets.count) \(m.exportScopeText.capitalized)") { m.exportAll() }.keyboardShortcut("e", modifiers: [.command, .shift])
+            Button("Export As…") { m.exportCurrent() }.keyboardShortcut("e", modifiers: .command)
+            Button("Quick Export") { m.quickExport() }
+            Button(m.exportAllTitle) { m.exportAll() }.keyboardShortcut("e", modifiers: [.command, .shift])
             Button("Export Settings…") { m.sheet = .export }
         }
 

@@ -105,7 +105,8 @@ extension ContentView {
         Button { m.autoExposure(scope: m.current.map { [$0] } ?? []) } label: { Label("Auto Exposure", systemImage: "plusminus.circle") }
         Button { m.applyAutoWB() } label: { Label("Auto White Balance", systemImage: "thermometer.sun") }
         Divider()
-        Button { m.quickExport() } label: { Label("Export", systemImage: "square.and.arrow.up") }.disabled(m.exporting)
+        Button { m.quickExport() } label: { Label("Quick Export", systemImage: "square.and.arrow.up") }.disabled(m.exporting)
+            .help("No dialog: into the folder the Export settings name (a HEIC folder next to the RAW by default)")
         Button("Export As…") { m.exportCurrent() }.disabled(m.exporting)
         Button { m.copyImageToClipboard() } label: { Label("Copy Edited Photo", systemImage: "doc.on.doc") }
             .help("The photo as developed here (look, exposure, white balance), full size, for pasting elsewhere")
@@ -290,69 +291,20 @@ extension ContentView {
 
 }
 
-/// The LUT's input space in Develop. A name that says it ("…_VLog") makes it a read-only line, so it can't be
-/// changed by accident; ⌥-click it to set one by hand anyway. A hand-made setting shows "(manual)" and can go back
-/// to the file name; a name that says nothing keeps the menu, with a hint.
+/// The LUT's input space in Develop, read-only: it comes from the LUT's file name ("…_VLog", "…SLog3…"). Setting
+/// it by hand is hidden for now (it wrote a file next to the LUTs, which for the built-in ones is inside the app).
 struct LUTInputLine: View {
     @ObservedObject var m: Model
     let lookID: Int
-    @StateObject private var box = Box()
-    final class Box: ObservableObject { @Published var picking = false }
 
     var body: some View {
         if let info = m.lutInput(lookID) {
-            switch info.source {
-            case .fileName:
-                Text("Input: \(info.space.name) (from file name)")
-                    .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
-                    .contentShape(Rectangle())
-                    .onTapGesture { if NSEvent.modifierFlags.contains(.option) { box.picking = true } }
-                    .help("Read from the LUT's file name. ⌥-click to set it by hand (also in the LUT thumbnail's right-click menu).")
-                    .popover(isPresented: $box.picking, arrowEdge: .bottom) {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text("Input this LUT expects").font(.caption).foregroundStyle(.secondary).padding(.bottom, 4)
-                            ForEach(Scenes.lutInputs, id: \.name) { opt in
-                                Button { m.setLUTInput(opt, for: lookID); box.picking = false } label: {
-                                    Label(opt.name, systemImage: opt.name == info.space.name ? "checkmark" : "")
-                                }
-                                .buttonStyle(.plain)
-                            }
-                        }
-                        .padding(12)
-                    }
-            case .manual:
-                Menu("Input: \(info.space.name) (manual)") { LUTInputChoices(m: m, lookID: lookID) }
-                    .fixedSize().controlSize(.small)
-                    .help("Set by hand, kept in kestrel-lut-inputs.json in the LUT folder")
-            case .assumed:
-                VStack(alignment: .leading, spacing: 1) {
-                    Menu("Input: \(info.space.name)") { LUTInputChoices(m: m, lookID: lookID) }
-                        .fixedSize().controlSize(.small)
-                    Text("Choose the input this LUT expects").font(.system(size: 10)).foregroundStyle(.secondary)
-                }
-            }
-        }
-    }
-}
-
-/// The input spaces to pick from, plus "Use file name" when a hand-made setting can be dropped.
-struct LUTInputChoices: View {
-    @ObservedObject var m: Model
-    let lookID: Int
-
-    var body: some View {
-        if let info = m.lutInput(lookID) {
-            ForEach(Scenes.lutInputs, id: \.name) { opt in
-                Button { m.setLUTInput(opt, for: lookID) } label: {
-                    if opt.name == info.space.name { Label(opt.name, systemImage: "checkmark") } else { Text(opt.name) }
-                }
-            }
-            if info.source == .manual {
-                Divider()
-                Button(info.guess.map { "Use File Name (\($0.name))" } ?? "Use File Name (none: assume S-Log3 / S-Gamut3.Cine)") {
-                    m.useFileNameInput(for: lookID)
-                }
-            }
+            let how = info.source == .fileName ? "from file name" : info.source == .manual ? "set earlier" : "assumed"
+            Text("Input: \(info.space.name) (\(how))")
+                .font(.system(size: 11)).foregroundStyle(.secondary).lineLimit(1)
+                .help(info.source == .assumed
+                      ? "The file name doesn't say which camera log this LUT expects, so S-Log3 / S-Gamut3.Cine is assumed. Names with VLog, SLog3, FLog2 … are read automatically."
+                      : "The camera log this LUT expects, read from its file name.")
         }
     }
 }

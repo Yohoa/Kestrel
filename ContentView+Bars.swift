@@ -79,10 +79,12 @@ extension ContentView {
                 .foregroundStyle(m.filter.isActive ? Color.accentColor : .secondary)
             Text(m.status).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail).layoutPriority(-1)
             Spacer(minLength: 6)
-            Button("Export this") { m.exportCurrent() }.glassButton().disabled(m.current == nil || m.exporting)
-            Button("Export \(m.exportScopeText) \(m.exportTargets.count) × \(m.batchPPs.count)") { m.exportAll() }
+            Button("Export As…") { m.exportCurrent() }.glassButton().disabled(m.current == nil || m.exporting)
+                .help("This photo with its look, to a place you choose (⌘E)")
+            Button(m.exportAllTitle) { m.exportAll() }
                 .glassButton(prominent: true)
-                .help("Exports the \(m.exportScopeText) photos (rejected ones never), once per ticked look")
+                .help(m.exportOwnLook ? "Exports the \(m.exportScopeText) photos, each with its own look (rejected ones never). Export settings: ⚙︎"
+                      : "Exports the \(m.exportScopeText) photos once per look ticked in the LUT panel (rejected ones never)")
                 .disabled(m.exportTargets.isEmpty || m.batchPPs.isEmpty || m.exporting || (m.outputMode.needsFolder && m.customOut == nil))
             Button { m.sheet = .export } label: { Image(systemName: "gearshape") }.help("Export settings")
             Button { m.sheet = .help } label: { Image(systemName: "questionmark.circle") }.help("Keyboard shortcuts (F1)")
@@ -126,8 +128,16 @@ extension ContentView {
     var exportSheet: some View {
         VStack(alignment: .leading, spacing: 12) {
             Text("Export settings").font(.headline)
-            Text("\(m.exportTargets.count) \(m.exportScopeText) photo(s) × \(m.batchPPs.count) look(s) → 10-bit HEIC. Rejected photos are never exported.")
+            Text("\(m.exportTargets.count) \(m.exportScopeText) photo(s) → 10-bit HEIC. Rejected photos are never exported.")
                 .font(.caption).foregroundStyle(.secondary)
+
+            GroupBox("Looks") {
+                Picker("", selection: $m.exportOwnLook) {
+                    Text("Each photo's own look (the one saved for it, else the current look)").tag(true)
+                    Text("The looks ticked in the LUT panel (\(m.batchPPs.count)), each photo once per look").tag(false)
+                }
+                .pickerStyle(.radioGroup).labelsHidden().frame(maxWidth: .infinity, alignment: .leading)
+            }
 
             GroupBox("Sidecar") {
                 Toggle("Copy the .xmp next to each export", isOn: $m.copySidecar).frame(maxWidth: .infinity, alignment: .leading)
@@ -144,7 +154,7 @@ extension ContentView {
                         ForEach(OutputMode.allCases) { Text($0.title).tag($0) }
                     }
                     .labelsHidden()
-                    Toggle("Put each look in its own folder (PP3/…)", isOn: $m.groupByLook).font(.caption)
+                    Toggle("Put each look in its own folder (PP3/, Fujifilm-ASTIA/ …)", isOn: $m.groupByLook).font(.caption)
                     if m.outputMode.needsFolder {
                         Text(m.customOut?.path ?? "No folder chosen").font(.caption).lineLimit(2).truncationMode(.middle)
                     }

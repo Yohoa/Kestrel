@@ -206,7 +206,7 @@ extension ContentView {
             Text("Tick looks to export:")
             Button("Favourite looks") { m.tickFavoriteLooks() }
             Button("All looks") { m.batchPPs = Set(m.looks.map(\.id)) }
-            Button("PP1–PP10 only") { m.batchPPs = Set(1...10) }
+            Button("Sony PP1–PP10 only") { m.batchPPs = Set(1...10) }
             Button("None") { m.batchPPs = [] }
         } label: { Image(systemName: "gearshape") }
         .menuStyle(.borderlessButton).fixedSize()
@@ -226,12 +226,7 @@ extension ContentView {
         }
         if let info = m.lutInput(look.id) {
             Divider()
-            Menu {
-                LUTInputChoices(m: m, lookID: look.id)
-            } label: {
-                Label("Input: \(info.space.name)" + (info.source == .manual ? " (manual)" : info.source == .fileName ? " (from file name)" : ""),
-                      systemImage: "camera.filters")
-            }
+            Text("Input: \(info.space.name)" + (info.source == .fileName ? " (from file name)" : info.source == .manual ? " (set earlier)" : " (assumed)"))
         }
     }
 

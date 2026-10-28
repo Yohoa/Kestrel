@@ -62,8 +62,8 @@ struct PPLook: Identifiable {
         id < 100 ? label : name.replacingOccurrences(of: " · ", with: "-").replacingOccurrences(of: " ", with: "_")
             .replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")
     }
-    /// Display title: "Base", "PP3 ITU709", or a LUT's name.
-    var title: String { id == 0 ? "Base" : (id < 100 ? "PP\(id) \(name)" : name) }
+    /// Display title: "Base", "Sony PP3 ITU709" (Sony's picture profiles; "PP" alone means nothing to most), or a LUT's name.
+    var title: String { id == 0 ? "Base" : (id < 100 ? "Sony PP\(id) \(name)" : name) }
     var space: CGColorSpace { CGColorSpace(name: spaceName)! }
     var needsSceneLinear: Bool {
         switch kind {
