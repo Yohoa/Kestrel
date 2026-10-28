@@ -2,7 +2,7 @@
 
 Newest first. Dates are when the change was made.
 
-## Unreleased (since 1.2)
+## 1.3 — 2026-10-28
 
 - **Built-in LUTs**: the 27 V-Log Alchemy LUTs (Apache-2.0, licence included) come with the app, used when no LUT folder of your own is set; LUT panel gear › Built-in LUTs switches back to them. Same layout as a LUT folder, so looks saved in `.xmp` files are found in either.
 
