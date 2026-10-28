@@ -1513,12 +1513,7 @@ final class Model: ObservableObject {
     /// kept as an empty set (= act on the current photo). Advanced mode (FastRawViewer default): plain = go there,
     /// the selection stays. Both: ⌘ = toggle the mark; ⇧ = range (replaces, or adds per Settings; ⌘⇧ = the other).
     /// Only a plain click moves the current photo.
-    /// Set by a click on a thumbnail: the photo is where the pointer is, so the grid must not scroll to it (it used
-    /// to centre it, and the second click of a double-click then landed on another photo).
-    var clickedInGrid = false
-
     func click(_ url: URL, command: Bool, shift: Bool) {
-        clickedInGrid = viewMode == .grid && url != current        // unchanged: no scroll would come to reset it
         if shift, let j = files.firstIndex(of: url) {
             let i = rangeStart().flatMap { files.firstIndex(of: $0) } ?? 0          // unknown start → the first photo
             let range = Set(files[min(i, j)...max(i, j)])

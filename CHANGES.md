@@ -8,7 +8,7 @@ Newest first. Dates are when the change was made.
 
 ## Unreleased (since 1.4)
 
-- **Grid**: clicking a photo no longer scrolls the grid (it used to centre the photo, so a double-click's second click landed on another one); moving with the keys scrolls only as far as needed.
+- **Grid**: clicking a photo no longer centres it (so a double-click's second click no longer lands on another photo): a photo in full view stays put, one cut off at the top or bottom edge scrolls just enough to show it whole; moving with the keys does the same.
 - The app is filed under **Photography**.
 
 ## 1.4 — 2026-10-28

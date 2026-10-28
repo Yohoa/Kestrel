@@ -271,11 +271,10 @@ extension ContentView {
                     .padding(8)
                     }                                   // Observing(thumbs): the cells get their thumbnails from here
                 }
-                // keys and the filmstrip: just far enough to show it (anchor nil); a click: not at all
-                .onChange(of: m.current) { _, new in
-                    if m.clickedInGrid { m.clickedInGrid = false; return }
-                    if let new { proxy.scrollTo(new) }
-                }
+                // Just far enough to show the whole photo (anchor nil), for keys and clicks alike: a photo already in
+                // view stays put (centring it moved it from under the pointer, so a double-click hit another
+                // photo); one cut off at the top or bottom edge is brought fully in.
+                .onChange(of: m.current) { _, new in if let new { proxy.scrollTo(new) } }
                 // back from the single view (G): open on the photo just viewed, not at the top
                 .onAppear {
                     guard let c = m.current else { return }
