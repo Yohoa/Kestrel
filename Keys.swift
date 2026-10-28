@@ -15,6 +15,7 @@ enum Shortcuts {
             ("↑ ↓", "One row up / down in the grid"),
             ("G", "Image grid ↔ single image"),
             ("Return, double-click", "Open the photo in single view (grid)"),
+            ("⌘N", "New window: another Kestrel, independent of this one"),
             ("⌘O  ⌘⇧O  ⌥O", "Open files / folder / folder with subfolders"),
             ("⌘⇧F4", "Reload the current folder"),
             ("⌘F", "Reveal in Finder"),

@@ -5,6 +5,10 @@ import Combine
 final class AppDelegate: NSObject, NSApplicationDelegate {
     @MainActor static weak var model: Model?
 
+    func applicationWillFinishLaunching(_ notification: Notification) {
+        NSWindow.allowsAutomaticWindowTabbing = false      // no window tabs (and no Show Tab Bar / Show All Tabs)
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         MainActor.assumeIsolated { AppDelegate.model?.flushForQuit() }       // pending develop saves are written first
         return .terminateNow
@@ -126,6 +130,18 @@ final class Model: ObservableObject {
     var expandedFolders: Set<String> {
         get { folderTree.expanded }
         set { folderTree.expanded = newValue }
+    }
+
+    /// File ▸ New Window: another Kestrel, as a process of its own, so the two windows share nothing but the settings
+    /// on disk (one model per process: render queues, caches and the scan index are per app). It opens empty.
+    func openNewInstance() {
+        let c = NSWorkspace.OpenConfiguration()
+        c.createsNewApplicationInstance = true
+        c.arguments = ["-openLastFolderAtLaunch", "NO"]       // for that launch only, not saved
+        NSWorkspace.shared.openApplication(at: Bundle.main.bundleURL, configuration: c) { [weak self] _, error in
+            guard let error else { return }
+            DispatchQueue.main.async { MainActor.assumeIsolated { self?.status = "Could not open a new window: \(error.localizedDescription)" } }
+        }
     }
 
     /// The Folders panel's refresh: the home folder, the mounted volumes and every folder opened in the tree, listed

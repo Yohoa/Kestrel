@@ -174,6 +174,9 @@ struct PanelCommands: Commands {
         }
         // File
         CommandGroup(replacing: .newItem) {
+            Button("New Window") { m.openNewInstance() }.keyboardShortcut("n", modifiers: .command)
+                .help("Another Kestrel, independent of this one")
+            Divider()
             Button("Open…") { m.open() }.keyboardShortcut("o", modifiers: .command)
             Button("Open Folder…") { m.openFolder(recursive: false) }.keyboardShortcut("o", modifiers: [.command, .shift])
             Button("Open Folder with Subfolders…") { m.openFolder(recursive: true) }.keyboardShortcut("o", modifiers: .option)
