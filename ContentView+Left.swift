@@ -98,7 +98,7 @@ extension ContentView {
                 .foregroundStyle(off ? Color.orange : Color.accentColor)
                 .frame(width: 18)
             if flash {
-                Text(network ? "Can't access: the network drive is not connected" : "Can't access: this folder is not there")
+                Text(network ? "Not connected" : "Folder not found")
                     .foregroundStyle(.orange).lineLimit(1).truncationMode(.tail)
                     .transition(.opacity)
             } else {

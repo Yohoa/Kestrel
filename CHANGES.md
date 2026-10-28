@@ -8,7 +8,7 @@ Newest first. Dates are when the change was made.
 
 ## Unreleased (since 1.5.2)
 
-- **Favorite folders** that can't be reached (a network drive not connected, a drive unplugged, a folder moved) are greyed with an orange sign; clicking one says "Can't access…" in the row for a moment instead of opening nothing. Checked in the background (2 s limit), again on every mount / unmount and on each click.
+- **Favorite folders** that can't be reached (a network drive not connected, a drive unplugged, a folder moved) are greyed with an orange sign; clicking one says "Not connected" (or "Folder not found") in the row for a moment instead of opening nothing. Checked in the background (2 s limit), again on every mount / unmount and on each click.
 - **⌘C copies the edited photo as HEIC** by default: 10-bit, a few MB (4.3 MB for a 24 MP photo) instead of a ~96 MB TIFF. Settings ▸ Export ▸ "⌘C copies the edited photo as" chooses HEIC (default), JPG (8-bit, opens anywhere) or TIFF (lossless, now without the unused alpha channel).
 - **⌘C also puts the file on the clipboard** (`<photo>_<look>.heic`, kept in ~/Library/Caches/Kestrel/Clipboard): pasting in Finder makes a real file, Mail and Messages attach it, image apps take the picture. Copies older than a day (or beyond 300 MB) are cleared at launch.
 
