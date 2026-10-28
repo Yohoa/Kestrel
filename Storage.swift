@@ -49,8 +49,10 @@ enum Storage {
     private static var warmed: [URL] = []
 
     /// Reads the whole file once, on slow storage only; the RAW decoder calls this before opening the file.
+    /// Not for a file above 400 MB: no RAW is that big (a 150 MP IIQ is ~300 MB), so it is something misnamed.
     static func warmWholeFile(_ url: URL) {
         guard isSlow(url) else { return }
+        if let size = try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize, size > 400 << 20 { return }
         lock.lock()
         if warmed.contains(url) { lock.unlock(); return }
         warmed.append(url)

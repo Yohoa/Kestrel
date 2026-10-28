@@ -2,14 +2,15 @@ import Foundation
 
 // MARK: - Photos
 
-/// Every camera RAW format macOS's RAW engine (CIRAWFilter / ImageIO) knows, by extension: the ones whose system type
-/// conforms to public.camera-raw-image. Whether a particular camera model decodes is up to macOS.
+/// Every camera RAW format macOS's RAW engine (CIRAWFilter / ImageIO) reads, by extension: the camera-raw types that
+/// ImageIO lists (CGImageSourceCopyTypeIdentifiers). Whether a particular camera model decodes is up to macOS.
+/// GoPro GPR has a system type but no decoder, so it is not here. ".raw" is checked further in `Model.scan`.
 let rawExtensions: Set<String> = [
     "arw", "srf", "sr2",                // Sony
     "raf",                              // Fujifilm
     "cr2", "cr3", "crw",                // Canon
     "nef", "nrw",                       // Nikon
-    "orf",                              // Olympus / OM System
+    "orf", "ori",                       // Olympus / OM System (ORI: the high-res shot's original frame)
     "rw2", "raw", "rwl",                // Panasonic, Leica
     "pef",                              // Pentax
     "dng",                              // Adobe DNG (Leica, Ricoh, phones …)
@@ -20,8 +21,11 @@ let rawExtensions: Set<String> = [
     "mos",                              // Leaf
     "mrw",                              // Konica Minolta
     "dcr",                              // Kodak
-    "gpr",                              // GoPro
 ]
+
+/// JPGs are shown too, but only those without a RAW of the same name next to them (the camera's RAW + JPG pairs
+/// show once, as the RAW).
+let bitmapExtensions: Set<String> = ["jpg", "jpeg"]
 
 struct Photo: Identifiable, Equatable {
     let url: URL

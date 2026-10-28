@@ -16,7 +16,7 @@ enum ExifInfo {
         let c: (date: Date?, gear: String)
         if let d = Storage.head(url, bytes: 256 << 10),
            case let fromData = readCapture(CGImageSourceCreateWithData(d as CFData, [kCGImageSourceTypeIdentifierHint: hint] as CFDictionary)),
-           fromData.date != nil || !fromData.gear.isEmpty {
+           fromData.date != nil {                       // no date: the EXIF lies further in, read the file
             c = fromData
         } else {
             c = readCapture(CGImageSourceCreateWithURL(url as CFURL, nil))

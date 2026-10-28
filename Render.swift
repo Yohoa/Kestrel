@@ -68,6 +68,7 @@ final class RAWSource {
 
     /// Camera as-shot white balance (read before any custom WB is applied).
     var asShot: (temp: Float, tint: Float)? {
+        if BitmapPhoto.isBitmap(url) { return BitmapPhoto.asShot }
         lock.lock(); defer { lock.unlock() }
         guard prepare() else { return nil }
         return base.map { ($0.temp, $0.tint) }
@@ -84,6 +85,7 @@ final class RAWSource {
 
     /// Decodes with `adj` at `scale` and bakes the result to a flat bitmap while the parameters still hold.
     func bake(_ adj: Adjust, scale: Float, scene: Bool) -> CIImage? {
+        if BitmapPhoto.isBitmap(url) { return BitmapPhoto.decode(url, adj: adj, scale: scale).flatMap(BakedPhoto.bake) }
         lock.lock(); defer { lock.unlock() }
         guard prepare(), let f = filter, let b = base else { return nil }
         f.scaleFactor = scale

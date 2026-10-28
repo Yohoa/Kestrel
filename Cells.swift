@@ -100,6 +100,8 @@ func labelColor(_ name: String?) -> Color {
 // MARK: - Badges shared by filmstrip and grid cells
 
 struct PhotoBadges: View {
+    /// More than one file type in the folder (set with the library): only then does each cell say which it is.
+    nonisolated(unsafe) static var showKind = false
     let photo: Photo
     let isSelected: Bool
 
@@ -111,7 +113,7 @@ struct PhotoBadges: View {
             }
             VStack {
                 HStack {
-                    if photo.kind != "ARW" { badge(photo.kind) }
+                    if Self.showKind { badge(photo.kind) }
                     Spacer()
                     if photo.unreadable { Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow) }
                     if isSelected { Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.accentColor).background(Circle().fill(.white).padding(2)) }

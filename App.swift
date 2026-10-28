@@ -118,7 +118,9 @@ final class ZoomState: ObservableObject {
 @MainActor
 final class Model: ObservableObject {
     // Library
-    @Published var library: [Photo] = []
+    @Published var library: [Photo] = [] {
+        didSet { PhotoBadges.showKind = Set(library.lazy.map(\.kind)).count > 1 }   // badge the type only in a mixed folder
+    }
     @Published var shownPhotos: [Photo] = [] {
         didSet {
             files = shownPhotos.map(\.url)
@@ -1156,7 +1158,7 @@ final class Model: ObservableObject {
         p.canChooseFiles = true
         p.canChooseDirectories = true
         p.allowsMultipleSelection = true
-        p.message = "Choose RAW files (Sony, Fujifilm, Canon, Nikon, Olympus, Panasonic, DNG …) or folders"
+        p.message = "Choose RAW files (Sony, Fujifilm, Canon, Nikon, Olympus, Panasonic, DNG …) or JPGs or folders"
         guard p.runModal() == .OK else { return }
         load(p.urls)
     }
@@ -1184,6 +1186,14 @@ final class Model: ObservableObject {
             unsent = []
             nextSend = Date().addingTimeInterval(max(0.5, Double(found.count) / 4000))   // less often as the list grows
         }
+        // A JPG waits until the walk has left its folder: only then is it known whether a RAW of the same name is there.
+        var jpgs: [String: [URL]] = [:]                 // folder path -> its JPGs
+        var rawStems: Set<String> = []                  // "folder/stem" (lowercased) of every RAW seen
+        func stem(_ f: URL) -> String { (f.deletingPathExtension().path).lowercased() }
+        func flushJPGs(_ folder: String) {
+            guard let list = jpgs.removeValue(forKey: folder) else { return }
+            for f in list where !rawStems.contains(stem(f)) { found.append(f); unsent.append(f) }
+        }
         for u in urls {
             var isDir: ObjCBool = false
             FileManager.default.fileExists(atPath: u.path, isDirectory: &isDir)
@@ -1200,10 +1210,12 @@ final class Model: ObservableObject {
                 func leaveFolders(for f: URL) {
                     let parent = f.deletingLastPathComponent().path
                     while let last = inside.last, parent != last, !parent.hasPrefix(last + "/") {
-                        index.folderListed(URL(fileURLWithPath: inside.removeLast()))
+                        let done = inside.removeLast()
+                        flushJPGs(done)
+                        index.folderListed(URL(fileURLWithPath: done))
                     }
                 }
-                defer { for d in inside { index.folderListed(URL(fileURLWithPath: d)) } }
+                defer { for d in inside { flushJPGs(d); index.folderListed(URL(fileURLWithPath: d)) } }
                 while let f = e?.nextObject() as? URL {
                     if Task.isCancelled { return r }
                     leaveFolders(for: f)
@@ -1216,18 +1228,32 @@ final class Model: ObservableObject {
                     }
                     let ext = f.pathExtension.lowercased()
                     if ext == "xmp" { index.sidecarSeen(f) }
-                    else if rawExtensions.contains(ext) {
+                    else if bitmapExtensions.contains(ext) {
+                        jpgs[f.deletingLastPathComponent().path, default: []].append(f)
+                        if let size = v?.fileSize, let date = v?.contentModificationDate { index.stampSeen(f, size: size, date: date) }
+                    }
+                    else if rawExtensions.contains(ext), ext != "raw" || Model.isPanasonicRAW(f) {
+                        rawStems.insert(stem(f))
                         found.append(f); unsent.append(f)
                         if let size = v?.fileSize, let date = v?.contentModificationDate { index.stampSeen(f, size: size, date: date) }
                     }
                     send()
                 }
-            } else if rawExtensions.contains(u.pathExtension.lowercased()) {
+            } else if rawExtensions.contains(u.pathExtension.lowercased()) || bitmapExtensions.contains(u.pathExtension.lowercased()) {
                 found.append(u)
             } else { r.sawNonRAWFile = true }
         }
+        for folder in Array(jpgs.keys) { flushJPGs(folder) }     // any whose folder path was spelled differently
         r.photos = Array(Set(found)).sorted(by: pathOrder).map { Photo(url: $0) }
         return r
+    }
+
+    /// ".raw" is also what disk images, audio and texture dumps are called; only the old Panasonic / Leica cameras'
+    /// files (a TIFF variant starting "IIU\0") are photos. One 4-byte read per .raw file.
+    nonisolated static func isPanasonicRAW(_ url: URL) -> Bool {
+        guard let h = try? FileHandle(forReadingFrom: url) else { return false }
+        defer { try? h.close() }
+        return (try? h.read(upToCount: 4)) == Data([0x49, 0x49, 0x55, 0x00])
     }
 
     private var loadTask: Task<Void, Never>?
@@ -1316,7 +1342,7 @@ final class Model: ObservableObject {
 
     private func finishLoad(_ urls: [URL], _ scan: ScanResult, recursive rec: Bool, streaming: Bool = false) {
         if scan.photos.isEmpty && scan.sawNonRAWFile {                       // e.g. a JPG or .cube dropped on the picture
-            status = "Nothing to open: that is not a RAW file (Sony, Fujifilm, Canon, Nikon, Olympus, Panasonic, DNG …)."
+            status = "Nothing to open: that is not a RAW file (Sony, Fujifilm, Canon, Nikon, Olympus, Panasonic, DNG …) or JPGs."
             notify(.export, status, icon: "exclamationmark.triangle")
             return
         }
@@ -1356,7 +1382,7 @@ final class Model: ObservableObject {
         restoreName = streaming && restore == nil ? lastName : nil
         if found.isEmpty {
             let what = urls.first?.lastPathComponent ?? "the selection"
-            emptyHint = rec ? "No RAW files in \(what)." : "No RAW files directly in \(what)."
+            emptyHint = rec ? "No RAW or JPG files in \(what)." : "No RAW or JPG files directly in \(what)."
             status = emptyHint ?? ""
             select(nil)
         } else {

@@ -131,12 +131,14 @@ final class Decoded {
 
     /// As-shot white balance of a RAW (Kelvin, tint).
     static func asShot(_ url: URL) -> (temp: Float, tint: Float)? {
+        if BitmapPhoto.isBitmap(url) { return BitmapPhoto.asShot }
         guard let f = CIRAWFilter(imageURL: url) else { return nil }
         return (f.neutralTemperature, f.neutralTint)
     }
 
     private func decode(scene: Bool) -> CIImage? {
-        Decoded.filter(url: url, adj: adj, scale: scale, scene: scene)?.filter.outputImage
+        if BitmapPhoto.isBitmap(url) { return BitmapPhoto.decode(url, adj: adj, scale: scale) }
+        return Decoded.filter(url: url, adj: adj, scale: scale, scene: scene)?.filter.outputImage
     }
 
     /// The configured RAW filter plus the camera's as-shot white balance (read before any custom WB is applied).
@@ -160,6 +162,7 @@ final class Decoded {
     /// Click-to-grey: the temperature and tint that make the clicked spot neutral. `u` and `v` are 0...1 fractions
     /// of the picture (v from the top). Core Image wants full-size output coordinates with the origin bottom-left.
     static func pickNeutral(_ url: URL, u: Double, vFromTop v: Double) -> (temp: Float, tint: Float)? {
+        if BitmapPhoto.isBitmap(url) { return BitmapPhoto.colour(url, u: u, vFromTop: v).flatMap(BitmapPhoto.neutral) }
         guard let f = CIRAWFilter(imageURL: url), let ext = f.outputImage?.extent else { return nil }
         f.neutralLocation = CGPoint(x: u * Double(ext.width), y: (1 - v) * Double(ext.height))
         return (f.neutralTemperature, f.neutralTint)
@@ -192,6 +195,7 @@ final class Decoded {
     /// Core Image has no auto mode, so the illuminant estimate is moved by the colour cast of the average
     /// (in xy chromaticity) and Core Image is asked which Kelvin / tint that corresponds to. Two passes.
     static func autoWB(_ url: URL) -> (temp: Float, tint: Float)? {
+        if BitmapPhoto.isBitmap(url) { return BitmapPhoto.averageColour(url).flatMap(BitmapPhoto.neutral) }
         guard let f0 = CIRAWFilter(imageURL: url) else { return nil }
         var n = f0.neutralChromaticity
         for _ in 0..<2 {
@@ -404,5 +408,98 @@ enum ClippingOverlay {
                                   space: CGColorSpaceCreateDeviceRGB(), bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue),
               let cg = ctx.makeImage() else { return nil }
         return NSImage(cgImage: cg, size: .zero)
+    }
+}
+
+/// A JPG with no RAW next to it, put through the same pipeline: decoded to linear light, then exposure and white
+/// balance applied as filters (a RAW gets them in the decoder). There is no camera neutral to start from, so "as
+/// shot" is 6500 K / 0: the picture as it is. Highlight recovery and scene-linear decoding don't apply — both
+/// renders are the same, so log LUTs see a display picture (close enough to judge a look by).
+enum BitmapPhoto {
+    static let asShot: (temp: Float, tint: Float) = (6500, 0)
+
+    static func isBitmap(_ url: URL) -> Bool { bitmapExtensions.contains(url.pathExtension.lowercased()) }
+
+    static func decode(_ url: URL, adj: Adjust, scale: Float) -> CIImage? {
+        Storage.warmWholeFile(url)
+        guard var img = CIImage(contentsOf: url, options: [.applyOrientationProperty: true]) else { return nil }
+        img = img.transformed(by: CGAffineTransform(translationX: -img.extent.minX, y: -img.extent.minY))
+        if scale < 0.999 {
+            img = img.applyingFilter("CILanczosScaleTransform", parameters: ["inputScale": scale, "inputAspectRatio": 1])
+        }
+        return adjusted(img, adj)
+    }
+
+    static func adjusted(_ img: CIImage, _ adj: Adjust) -> CIImage {
+        var out = img
+        if adj.ev != 0 { out = out.applyingFilter("CIExposureAdjust", parameters: ["inputEV": adj.ev]) }
+        let t = adj.temp ?? asShot.temp, tint = adj.tint ?? asShot.tint
+        if t != asShot.temp || tint != asShot.tint { out = whiteBalance(out, t, tint) }
+        return out.cropped(to: img.extent)
+    }
+
+    /// The RAW sliders' sense: the light was `temp` K, so a higher number makes the picture warmer, + tint magenta.
+    static func whiteBalance(_ img: CIImage, _ temp: Float, _ tint: Float) -> CIImage {
+        img.applyingFilter("CITemperatureAndTint", parameters: [
+            "inputNeutral": CIVector(x: CGFloat(temp), y: CGFloat(tint)),
+            "inputTargetNeutral": CIVector(x: CGFloat(asShot.temp), y: CGFloat(asShot.tint)),
+        ])
+    }
+
+    /// The temperature / tint that turn this linear colour grey: a coarse search, then a finer one around the best.
+    static func neutral(for rgb: SIMD3<Float>) -> (temp: Float, tint: Float)? {
+        guard rgb.min() > 0.0001 else { return nil }
+        let unit = CGRect(x: 0, y: 0, width: 1, height: 1)
+        let src = CIImage(color: CIColor(red: CGFloat(rgb.x), green: CGFloat(rgb.y), blue: CGFloat(rgb.z), alpha: 1,
+                                         colorSpace: Engine.linear)!).cropped(to: unit)
+        func cast(_ t: Float, _ ti: Float) -> Float {
+            var px = [Float](repeating: 0, count: 4)
+            Engine.ctx.render(whiteBalance(src, t, ti), toBitmap: &px, rowBytes: 16, bounds: unit, format: .RGBAf, colorSpace: Engine.linear)
+            let m = (px[0] + px[1] + px[2]) / 3
+            guard m > 0 else { return .infinity }
+            return abs(px[0] / m - 1) + abs(px[1] / m - 1) + abs(px[2] / m - 1)
+        }
+        var best: (t: Float, ti: Float, e: Float) = (asShot.temp, asShot.tint, .infinity)
+        var tStep: Float = 500, tiStep: Float = 10
+        var tRange = stride(from: Float(2000), through: 12000, by: tStep), tiRange = stride(from: Float(-150), through: 150, by: tiStep)
+        for _ in 0..<3 {
+            for t in tRange { for ti in tiRange { let e = cast(t, ti); if e < best.e { best = (t, ti, e) } } }
+            tStep /= 10; tiStep /= 10
+            tRange = stride(from: max(2000, best.t - tStep * 10), through: min(12000, best.t + tStep * 10), by: tStep)
+            tiRange = stride(from: max(-150, best.ti - tiStep * 10), through: min(150, best.ti + tiStep * 10), by: tiStep)
+        }
+        return best.e.isFinite ? (best.t.rounded(), best.ti.rounded()) : nil
+    }
+
+    /// Mean linear colour of a small square around (u, v) (fractions of the picture, v from the top).
+    static func colour(_ url: URL, u: Double, vFromTop v: Double) -> SIMD3<Float>? {
+        guard let img = decode(url, adj: Adjust(), scale: 0.25) else { return nil }
+        let e = img.extent
+        let r = CGRect(x: e.minX + u * e.width - 3, y: e.minY + (1 - v) * e.height - 3, width: 7, height: 7).intersection(e)
+        guard !r.isEmpty else { return nil }
+        return mean(img.cropped(to: r))
+    }
+
+    /// Mean linear colour of the mid tones (clipped and near-black pixels left out), for Auto WB.
+    static func averageColour(_ url: URL) -> SIMD3<Float>? {
+        guard let img = decode(url, adj: Adjust(), scale: 0.08) else { return nil }
+        let w = Int(img.extent.width), h = Int(img.extent.height)
+        guard w > 4, h > 4 else { return nil }
+        var px = [Float](repeating: 0, count: w * h * 4)
+        Engine.ctx.render(img, toBitmap: &px, rowBytes: w * 16, bounds: img.extent, format: .RGBAf, colorSpace: Engine.linear)
+        var s = SIMD3<Float>(0, 0, 0), n = 0
+        for i in 0..<(w * h) {
+            let c = SIMD3<Float>(px[4 * i], px[4 * i + 1], px[4 * i + 2])
+            guard c.max() < 0.95, c.max() > 0.01 else { continue }
+            s += c; n += 1
+        }
+        return n > 100 ? s / Float(n) : nil
+    }
+
+    private static func mean(_ img: CIImage) -> SIMD3<Float>? {
+        let avg = img.applyingFilter("CIAreaAverage", parameters: [kCIInputExtentKey: CIVector(cgRect: img.extent)])
+        var px = [Float](repeating: 0, count: 4)
+        Engine.ctx.render(avg, toBitmap: &px, rowBytes: 16, bounds: CGRect(x: 0, y: 0, width: 1, height: 1), format: .RGBAf, colorSpace: Engine.linear)
+        return SIMD3(px[0], px[1], px[2])
     }
 }
