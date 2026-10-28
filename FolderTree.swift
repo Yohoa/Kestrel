@@ -1,0 +1,193 @@
+import SwiftUI
+import AppKit
+import ImageIO
+import UniformTypeIdentifiers
+
+@MainActor
+final class FolderNode: ObservableObject, Identifiable, Hashable {
+    nonisolated let url: URL
+    nonisolated var id: URL { url }
+    init(_ url: URL) { self.url = url }
+
+    /// nil until listed, then the subfolders (empty when there are none or the folder can't be read).
+    @Published private(set) var children: [FolderNode]?
+    /// The folder couldn't be read (no permission, a network share that dropped).
+    @Published private(set) var unreadable = false
+    private var listing = false
+    private var relistAgain = false
+
+    func loadChildren() {
+        guard children == nil else { return }
+        relist()
+    }
+
+    /// Lists the subfolders again (after they changed on disk); child nodes that are still there are kept.
+    func relist() {
+        guard !listing else { relistAgain = true; return }      // run again once the current listing is done
+        listing = true
+        let url = self.url
+        DispatchQueue.global(qos: .utility).async {
+            let keys: [URLResourceKey] = [.isDirectoryKey, .isPackageKey]
+            let listed = try? FileManager.default.contentsOfDirectory(at: url, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles])
+            let items = listed ?? []
+            let dirs = items.filter {
+                let v = try? $0.resourceValues(forKeys: Set(keys))
+                return v?.isDirectory == true && v?.isPackage != true
+            }
+            .sorted { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    let old = Dictionary((self.children ?? []).map { ($0.url, $0) }, uniquingKeysWith: { a, _ in a })
+                    self.children = dirs.map { old[$0] ?? FolderNode($0) }
+                    self.unreadable = listed == nil
+                    self.listing = false
+                    if self.relistAgain { self.relistAgain = false; self.relist() }
+                }
+            }
+        }
+    }
+
+    nonisolated static func == (a: FolderNode, b: FolderNode) -> Bool { a.url == b.url }
+    nonisolated func hash(into h: inout Hasher) { h.combine(url) }
+
+    /// The tree starts with the folders in the home folder, then each mounted volume.
+    static let home = FolderNode(FileManager.default.homeDirectoryForCurrentUser)
+}
+
+/// The mounted volumes other than the startup disk: external drives and network shares (SMB, AFP, NFS, WebDAV).
+/// Taken from the system's list of mounts, not by reading /Volumes once, and refreshed whenever something is
+/// mounted, unmounted or renamed, so a share connected while the app is open shows up at once.
+@MainActor
+final class FolderVolumes: ObservableObject {
+    static let shared = FolderVolumes()
+    @Published private(set) var nodes: [FolderNode] = []
+    private(set) var network: Set<URL> = []
+
+    private init() {
+        let nc = NSWorkspace.shared.notificationCenter
+        for n in [NSWorkspace.didMountNotification, NSWorkspace.didUnmountNotification, NSWorkspace.didRenameVolumeNotification] {
+            nc.addObserver(forName: n, object: nil, queue: .main) { _ in MainActor.assumeIsolated { FolderVolumes.shared.refresh() } }
+        }
+        refresh()
+    }
+
+    func refresh() {
+        DispatchQueue.global(qos: .utility).async {
+            let keys: [URLResourceKey] = [.volumeIsLocalKey, .volumeIsRootFileSystemKey, .volumeIsBrowsableKey]
+            let urls = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? []
+            var vols: [URL] = [], net: Set<URL> = []
+            for u in urls {
+                let v = try? u.resourceValues(forKeys: Set(keys))
+                if v?.volumeIsRootFileSystem == true || v?.volumeIsBrowsable == false { continue }
+                vols.append(u.standardizedFileURL)
+                if v?.volumeIsLocal == false { net.insert(u.standardizedFileURL) }
+            }
+            vols.sort { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    let old = Dictionary(self.nodes.map { ($0.url, $0) }, uniquingKeysWith: { a, _ in a })
+                    self.network = net
+                    self.nodes = vols.map { old[$0] ?? FolderNode($0) }
+                }
+            }
+        }
+    }
+}
+
+/// The top level of the folder tree; fills in once the home folder has been listed.
+struct FolderTreeRoots: View {
+    @ObservedObject var home = FolderNode.home
+    @ObservedObject var volumes = FolderVolumes.shared
+    let m: Model
+
+    var body: some View {
+        ForEach((home.children ?? []) + volumes.nodes) { FolderTreeRow(m: m, tree: m.folderTree, node: $0, depth: 0) }
+            .onAppear { home.loadChildren() }
+    }
+}
+
+extension Notification.Name {
+    /// The current folder's row has just been added to the tree (its parent finished listing), so it can be scrolled to.
+    static let folderTreeCurrentRowAppeared = Notification.Name("folderTreeCurrentRowAppeared")
+}
+
+/// Observes only the tree state and its folder, not the whole model (which changes all the time).
+struct FolderTreeRow: View {
+    let m: Model
+    @ObservedObject var tree: FolderTreeState
+    @ObservedObject var node: FolderNode
+    let depth: Int
+
+    var path: String { node.url.standardizedFileURL.path }
+
+    /// Volumes at the top level get a drive or network icon, everything else a folder.
+    var icon: String {
+        let isCurrent = tree.current == path
+        guard depth == 0, path.hasPrefix("/Volumes/") else { return isCurrent ? "folder.fill" : "folder" }
+        return FolderVolumes.shared.network.contains(node.url) ? "network" : "externaldrive"
+    }
+
+    var body: some View {
+        let expanded = tree.expanded.contains(path)
+        let isCurrent = tree.current == path
+        VStack(alignment: .leading, spacing: 0) {
+            HStack(spacing: 4) {
+                if node.children?.isEmpty == false {
+                    Button {
+                        if expanded { tree.expanded.remove(path) } else { tree.expanded.insert(path) }
+                    } label: {
+                        Image(systemName: expanded ? "chevron.down" : "chevron.right")
+                            .font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary).frame(width: 14, height: 14)
+                    }
+                    .buttonStyle(.plain)
+                } else {
+                    Color.clear.frame(width: 14, height: 14)
+                }
+                Image(systemName: icon).foregroundStyle(isCurrent ? Color.accentColor : .secondary)
+                Text(node.url.lastPathComponent).lineLimit(1).truncationMode(.middle)
+                if node.unreadable {
+                    Image(systemName: "exclamationmark.triangle").font(.system(size: 9)).foregroundStyle(.yellow)
+                        .help("Can't read this folder. For a network share, check that it is still connected and that Kestrel may access network volumes (System Settings › Privacy & Security › Files & Folders).")
+                }
+                Spacer(minLength: 0)
+            }
+            .font(.system(size: 12))
+            .padding(.leading, CGFloat(depth) * 14)
+            .padding(.vertical, 3).padding(.horizontal, 4)
+            .background(RoundedRectangle(cornerRadius: 5).fill(isCurrent ? Color.accentColor.opacity(0.25) : .clear))
+            .contentShape(Rectangle())
+            .onTapGesture { m.load([node.url]) }
+            .contextMenu { menu(expanded: expanded) }
+            .id(path)
+            if expanded, let kids = node.children {
+                ForEach(kids) { FolderTreeRow(m: m, tree: tree, node: $0, depth: depth + 1) }
+            }
+        }
+        .onAppear {
+            node.loadChildren()             // to know whether it gets a disclosure chevron
+            if isCurrent { NotificationCenter.default.post(name: .folderTreeCurrentRowAppeared, object: nil) }
+        }
+    }
+
+    @ViewBuilder func menu(expanded: Bool) -> some View {
+        Button("Open") { m.load([node.url]) }
+        if tree.includeSubfolders {
+            Button("Open This Folder Only") { m.load([node.url], recursive: false) }
+        } else {
+            Button("Open Including Subfolders") { m.load([node.url], recursive: true) }
+        }
+        Divider()
+        if node.children?.isEmpty == false {
+            Button(expanded ? "Collapse" : "Expand") {
+                if expanded { tree.expanded.remove(path) } else { tree.expanded.insert(path) }
+            }
+        }
+        Button("Refresh Subfolders") { node.relist() }
+        Divider()
+        Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([node.url]) }
+        Button("Copy Path") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(node.url.path, forType: .string)
+        }
+    }
+}

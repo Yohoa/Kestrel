@@ -1,0 +1,179 @@
+import SwiftUI
+import AppKit
+import ImageIO
+import UniformTypeIdentifiers
+
+// Filmstrip, status bar and sheets.
+
+extension ContentView {
+    // MARK: filmstrip (the mouse wheel scrolls it sideways)
+
+    var filmstrip: some View { FilmstripView(m: m, thumbs: thumbs, menu: { AnyView(photoMenu($0)) }) }
+
+    // MARK: status bar
+
+    /// Also redrawn on its own when the status line or the export progress changes (they don't redraw the window).
+    var statusBar: some View { Observing(m.statusState) { _ in statusBarContent } }
+
+    var statusBarContent: some View {
+        HStack(spacing: 9) {
+            Button { m.step(-1) } label: { Image(systemName: "chevron.left") }
+                .buttonStyle(.plain).disabled((m.currentIndex ?? 0) == 0)
+            Text(m.currentIndex.map { "\($0 + 1)/\(m.files.count)" } ?? "–/\(m.files.count)")
+                .font(.system(size: 12).monospacedDigit()).frame(minWidth: 58)
+            Button { m.step(1) } label: { Image(systemName: "chevron.right") }
+                .buttonStyle(.plain).disabled(m.currentIndex.map { $0 >= m.files.count - 1 } ?? true)
+            Text(m.current?.lastPathComponent ?? "").font(.system(size: 12, design: .monospaced))
+            Text(m.imageSize).font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary)
+            Divider()
+            Button { m.nudgeExposure(NSEvent.modifierFlags.contains(.shift) ? -1 : -1.0 / 3) } label: { Image(systemName: "minus.square") }.buttonStyle(.plain)
+            Text(String(format: "%+.2f EV", m.exposure)).font(.system(size: 12).monospacedDigit())
+            Button { m.nudgeExposure(NSEvent.modifierFlags.contains(.shift) ? 1 : 1.0 / 3) } label: { Image(systemName: "plus.square") }.buttonStyle(.plain)
+            Menu("\(m.wbIsCustom ? "WB" : "As shot") \(Int(m.temperature))K/\(Int(m.tint))") {
+                ForEach(WBPreset.all) { p in Button(p.name) { m.applyWBPreset(p) } }
+                Divider()
+                Button("Pick neutral…") { m.pickingWB = true }
+            }
+            .fixedSize()
+            Divider()
+            ratingControls
+            Divider()
+            indicator("O", on: m.showOver) { m.toggleOver() }
+            indicator("U", on: m.showUnder) { m.toggleUnder() }
+            indicator(m.zoomLabel, on: m.zoomed) { m.toggleZoom() }
+                .help("Click: fit ↔ smart zoom. ⌘+ / ⌘− step, ⌘1 = 100 %, ⌘0 = fit")
+            if m.currentIsSelected {
+                Text("Sel").font(.caption.bold()).foregroundStyle(.red).help("The photo on screen is part of the selection")
+            }
+            if m.hasGroup {
+                Text("\(m.selection.count) selected").font(.caption).foregroundStyle(Color.accentColor)
+                    .help("Ratings, labels, ⌘V, Apply to…, Copy WB to… and Export act on these. Esc clears.")
+            }
+            Divider()
+            if m.exporting {
+                ProgressView(value: m.progress).frame(width: 80)
+                Button("Cancel") { m.cancelExport() }.controlSize(.small)
+            }
+            Button { withAnimation(LayoutStore.spring) { m.toggle(.filmstrip) } } label: {
+                Image(systemName: "film").foregroundStyle(m.shown(.filmstrip) ? Color.accentColor : .secondary)
+            }
+            .buttonStyle(.plain).disabled(m.viewMode == .grid)
+            .help(m.shown(.filmstrip) ? "Fold the filmstrip (F6)" : "Show the filmstrip (F6)")
+            Button { m.toggleGrid() } label: { Image(systemName: m.viewMode == .grid ? "photo" : "square.grid.2x2") }
+                .buttonStyle(.plain).help(m.viewMode == .grid ? "Single photo (G)" : "Grid view (G)")
+            if m.viewMode == .grid { Slider(value: $m.gridCell, in: 120...360).frame(width: 90) }
+            Text("\(m.shownPhotos.count)/\(m.library.count)\(m.filter.isActive ? " filtered" : "")").font(.caption.monospacedDigit())
+                .foregroundStyle(m.filter.isActive ? Color.accentColor : .secondary)
+            Text(m.status).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail).layoutPriority(-1)
+            Spacer(minLength: 6)
+            Button("Export this") { m.exportCurrent() }.glassButton().disabled(m.current == nil || m.exporting)
+            Button("Export \(m.exportScopeText) \(m.exportTargets.count) × \(m.batchPPs.count)") { m.exportAll() }
+                .glassButton(prominent: true)
+                .help("Exports the \(m.exportScopeText) photos (rejected ones never), once per ticked look")
+                .disabled(m.exportTargets.isEmpty || m.batchPPs.isEmpty || m.exporting || (m.outputMode.needsFolder && m.customOut == nil))
+            Button { m.sheet = .export } label: { Image(systemName: "gearshape") }.help("Export settings")
+            Button { m.sheet = .help } label: { Image(systemName: "questionmark.circle") }.help("Keyboard shortcuts (F1)")
+        }
+        .padding(.horizontal, 10)
+    }
+
+    var ratingControls: some View {
+        let p = m.photo(m.current)
+        return HStack(spacing: 2) {
+            ForEach(1...5, id: \.self) { i in
+                Button { m.setRating(i) } label: {
+                    Image(systemName: i <= (p?.rating ?? 0) ? "star.fill" : "star").font(.system(size: 11)).foregroundStyle(.orange)
+                }.buttonStyle(.plain)
+            }
+            Button { m.setRating(-1) } label: {
+                Image(systemName: p?.isRejected == true ? "xmark.circle.fill" : "xmark.circle").foregroundStyle(.red)
+            }.buttonStyle(.plain).help("Reject (X)")
+            ForEach(labelNames, id: \.self) { n in
+                Button { m.setLabel(n) } label: {
+                    Circle().fill(labelColor(n)).frame(width: 10, height: 10)
+                        .overlay(Circle().stroke(Color.primary.opacity(p?.label == n ? 1 : 0.15), lineWidth: 2))
+                }.buttonStyle(.plain)
+            }
+        }
+        .disabled(m.current == nil)
+    }
+
+    func indicator(_ text: String, on: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(text).font(.system(size: 11, weight: .semibold))
+                .padding(.horizontal, 5).padding(.vertical, 1)
+                .background(on ? Color.accentColor : Color.gray.opacity(0.25)).foregroundStyle(on ? Color.white : Color.secondary)
+                .clipShape(RoundedRectangle(cornerRadius: 3))
+        }.buttonStyle(.plain)
+    }
+
+    // MARK: sheets
+
+    var exportSheet: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("Export settings").font(.headline)
+            Text("\(m.exportTargets.count) \(m.exportScopeText) photo(s) × \(m.batchPPs.count) look(s) → 10-bit HEIC. Rejected photos are never exported.")
+                .font(.caption).foregroundStyle(.secondary)
+
+            GroupBox("Sidecar") {
+                Toggle("Copy the .xmp next to each export", isOn: $m.copySidecar).frame(maxWidth: .infinity, alignment: .leading)
+            }
+            GroupBox("Quality") {
+                HStack {
+                    Slider(value: $m.quality, in: 0.5...1)
+                    Text(String(format: "%.2f", m.quality)).monospacedDigit()
+                }
+            }
+            GroupBox("Output") {
+                VStack(alignment: .leading) {
+                    Picker("", selection: $m.outputMode) {
+                        ForEach(OutputMode.allCases) { Text($0.title).tag($0) }
+                    }
+                    .labelsHidden()
+                    Toggle("Put each look in its own folder (PP3/…)", isOn: $m.groupByLook).font(.caption)
+                    if m.outputMode.needsFolder {
+                        Text(m.customOut?.path ?? "No folder chosen").font(.caption).lineLimit(2).truncationMode(.middle)
+                    }
+                    HStack {
+                        Button("Choose…") { m.chooseOutput() }
+                        Menu("Recent") {
+                            ForEach(m.recentOutputs, id: \.self) { u in
+                                Button(u.deletingLastPathComponent().lastPathComponent + "/" + u.lastPathComponent) { m.useOutput(u) }
+                            }
+                        }
+                        .disabled(m.recentOutputs.isEmpty)
+                        if m.customOut != nil { Button("Reset") { m.customOut = nil } }
+                    }
+                }
+                .frame(maxWidth: .infinity, alignment: .leading)
+            }
+            HStack { Spacer(); Button("Done") { m.sheet = nil }.keyboardShortcut(.defaultAction) }
+        }
+        .padding(16)
+        .frame(width: 440)
+    }
+
+    var helpSheet: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            Text("Keyboard shortcuts").font(.headline)
+            ScrollView {
+                VStack(alignment: .leading, spacing: 12) {
+                    ForEach(Shortcuts.groups, id: \.title) { g in
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text(g.title).font(.subheadline.bold())
+                            ForEach(g.items, id: \.keys) { item in
+                                HStack(alignment: .firstTextBaseline) {
+                                    Text(item.keys).font(.system(size: 12, design: .monospaced)).frame(width: 130, alignment: .leading)
+                                    Text(item.text).font(.system(size: 12))
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+            HStack { Spacer(); Button("Close") { m.sheet = nil }.keyboardShortcut(.defaultAction) }
+        }
+        .padding(16)
+        .frame(width: 600, height: 520)
+    }
+}

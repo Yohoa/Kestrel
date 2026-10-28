@@ -1,0 +1,193 @@
+import SwiftUI
+import AppKit
+import ImageIO
+import UniformTypeIdentifiers
+
+// Left column panels: folders, favourites, EXIF, XMP.
+
+extension ContentView {
+    // MARK: left column
+
+    var leftHeader: some View {
+        VStack(spacing: 0) {
+            HStack {
+                Button { m.open() } label: { Label("Open…", systemImage: "folder") }.glassButton().focusable(false)
+                Menu {
+                    ForEach(m.recentInputs, id: \.self) { u in
+                        Button(u.deletingLastPathComponent().lastPathComponent + "/" + u.lastPathComponent) { m.load([u]) }
+                    }
+                    Divider()
+                    Button("Clear history") { m.clearHistory() }
+                } label: { Label("History", systemImage: "clock.arrow.circlepath") }
+                    .disabled(m.recentInputs.isEmpty)
+            }
+            .padding([.top, .horizontal], 6)
+            Toggle("Include subfolders", isOn: $m.includeSubfolders)
+                .font(.caption).padding(.horizontal, 8).padding(.vertical, 3)
+                .onChange(of: m.includeSubfolders) { _, _ in m.includeSubfoldersChanged() }
+        }
+    }
+
+    var foldersPanel: some View {
+        PanelBox("Folders", panel: .folders, onClose: { m.toggle(.folders) }, trailing: {
+            Menu {
+                Picker("Open a folder with", selection: $m.subfolderScope) {
+                    Text("This folder only").tag(0)
+                    ForEach([1, 2, 3, 4, 5, 8], id: \.self) { Text($0 == 1 ? "1 level of subfolders" : "\($0) levels of subfolders").tag($0) }
+                    Text("All subfolders").tag(-1)
+                }
+                .pickerStyle(.inline)
+            } label: {
+                Image(systemName: "gearshape").foregroundStyle(m.includeSubfolders ? Color.accentColor : .secondary)
+            }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            .help(m.subfolderScope == 0 ? "Opens this folder only" : m.subfolderScope < 0 ? "Includes all subfolders"
+                  : "Includes \(m.subfolderScope) level(s) of subfolders")
+        }) {
+            ScrollViewReader { proxy in
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 0) {
+                        FolderTreeRoots(m: m)
+                    }
+                    .padding(4)
+                }
+                .onAppear { scrollTree(proxy) }
+                .onReceive(NotificationCenter.default.publisher(for: .folderTreeCurrentRowAppeared)) { _ in scrollTree(proxy) }
+                .onChange(of: m.currentFolder) { _, _ in scrollTree(proxy) }
+            }
+        }
+    }
+
+    /// Brings the current folder into view once its ancestors have been expanded and laid out.
+    func scrollTree(_ proxy: ScrollViewProxy) {
+        guard let f = m.currentFolder?.standardizedFileURL.path else { return }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { withAnimation { proxy.scrollTo(f, anchor: .center) } }
+    }
+
+    var favoritesPanel: some View {
+        PanelBox("Favorite folders", panel: .favorites, onClose: { m.toggle(.favorites) }, trailing: {
+            Button { m.addFavorite() } label: { Image(systemName: "star") }
+                .buttonStyle(.plain).help("Add the current folder").disabled(m.currentFolder == nil)
+        }) {
+            List(m.favorites, id: \.self) { u in
+                Label(u.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"), systemImage: "folder.fill")
+                    .lineLimit(1).truncationMode(.middle)
+                    .contentShape(Rectangle())
+                    .onTapGesture { m.load([u]) }
+                    .contextMenu { Button("Remove") { m.removeFavorite(u) } }
+            }
+            .listStyle(.plain)
+            .scrollContentBackground(.hidden)
+        }
+    }
+
+    var exifPanel: some View {
+        PanelBox("EXIF", panel: .exif, onClose: { m.toggle(.exif) }) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 3) {
+                    ForEach(Array(m.exifLines.enumerated()), id: \.offset) { _, kv in
+                        HStack(alignment: .firstTextBaseline) {
+                            Text(kv.0).foregroundStyle(.secondary).frame(width: 62, alignment: .leading)
+                            Text(kv.1).textSelection(.enabled)
+                        }
+                        .font(.system(size: 11))
+                    }
+                }
+                .padding(8).frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    // MARK: XMP panel
+
+    var xmpPanel: some View {
+        PanelBox("XMP Metadata", panel: .xmp, onClose: { m.toggle(.xmp) }, trailing: { xmpMenu }) {
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    if m.current == nil {
+                        Text("No photo").foregroundStyle(.secondary)
+                    } else if m.xmpText == nil {
+                        Text("No sidecar yet. It is created the first time you rate, label or develop this photo.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        xmpEditor
+                    }
+                }
+                .padding(8).frame(maxWidth: .infinity, alignment: .leading)
+            }
+        }
+    }
+
+    var xmpMenu: some View {
+        Menu {
+            Button("Import exposure from the sidecar") { m.importXMPIntoSettings(includeWB: false) }
+            Button("Import exposure and white balance") { m.importXMPIntoSettings(includeWB: true) }
+            Button("Fill the draft from my develop settings") { m.fillXMPDraftFromSettings() }
+            Divider()
+            Button("Reveal sidecar in Finder") {
+                if let c = m.current { NSWorkspace.shared.activateFileViewerSelecting([XMPFile.url(for: c)]) }
+            }
+        } label: { Image(systemName: "ellipsis.circle") }
+        .menuStyle(.borderlessButton).fixedSize().disabled(m.current == nil)
+    }
+
+    var xmpEditor: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            HStack(spacing: 2) {
+                ForEach(1...5, id: \.self) { i in
+                    Button { m.xmpDraft.rating = m.xmpDraft.rating == i ? 0 : i } label: {
+                        Image(systemName: i <= m.xmpDraft.rating ? "star.fill" : "star").foregroundStyle(.orange)
+                    }.buttonStyle(.plain)
+                }
+                Button { m.xmpDraft.rating = m.xmpDraft.rating == -1 ? 0 : -1 } label: {
+                    Image(systemName: "xmark.circle\(m.xmpDraft.rating == -1 ? ".fill" : "")").foregroundStyle(.red)
+                }.buttonStyle(.plain).help("Reject (rating −1)")
+                Spacer()
+                Picker("", selection: $m.xmpDraft.label) {
+                    Text("No label").tag("")
+                    ForEach(labelNames, id: \.self) { Text($0).tag($0) }
+                }
+                .labelsHidden().frame(width: 100)
+            }
+            xmpField("libraw:Exposure", "EV", $m.xmpDraft.exposure)
+            xmpField("crs:Exposure2012", "EV", $m.xmpDraft.adobeExposure)
+            xmpField("crs:Temperature", "K", $m.xmpDraft.temperature)
+            xmpField("crs:Tint", "", $m.xmpDraft.tint)
+
+            let pending = m.xmpPendingChanges
+            VStack(alignment: .leading, spacing: 3) {
+                Text("Review").font(.caption.bold())
+                if pending.isEmpty {
+                    Text("No pending changes").font(.caption).foregroundStyle(.secondary)
+                } else {
+                    ForEach(Array(pending.enumerated()), id: \.offset) { _, c in
+                        Text("\(c.tag): \(c.old) → \(c.new)").font(.system(size: 10, design: .monospaced))
+                    }
+                    HStack {
+                        Button("Write to XMP") { m.writeXMPDraft() }.controlSize(.small)
+                        Button("Revert") { m.revertXMPDraft() }.controlSize(.small)
+                    }
+                }
+            }
+            .padding(6).frame(maxWidth: .infinity, alignment: .leading)
+            .background(Color.gray.opacity(0.15)).clipShape(RoundedRectangle(cornerRadius: 4))
+
+            ForEach(m.xmpIssues, id: \.self) { Label($0, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange) }
+
+            if let line = m.xmpDevelopLine {
+                Text(line).font(.caption2).foregroundStyle(.secondary)
+            }
+
+            XMPFieldList(m: m)
+        }
+    }
+
+    func xmpField(_ tag: String, _ unit: String, _ text: Binding<String>) -> some View {
+        HStack {
+            Text(tag).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary).frame(width: 118, alignment: .leading)
+            TextField("", text: text).textFieldStyle(.roundedBorder).frame(width: 90)
+            Text(unit).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+}
