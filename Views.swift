@@ -207,6 +207,11 @@ struct SettingsView: View {
                     Text(String(format: "%.2f", m.quality)).monospacedDigit()
                 }
                 Toggle("Copy the .xmp next to each export", isOn: $m.copySidecar)
+                Picker("⌘C copies the edited photo as", selection: $m.copyAsTIFF) {
+                    Text("HEIC (small; default)").tag(false)
+                    Text("TIFF (lossless, larger)").tag(true)
+                }
+                .help("HEIC: 10-bit, a few MB at the HEIC quality above. TIFF: 8-bit and lossless, ~25 MB or more for 24 MP. With HEIC, an app that only takes TIFF still gets an 8-bit TIFF, made when it pastes.")
             }
         }
         .formStyle(.grouped)

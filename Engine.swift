@@ -356,6 +356,11 @@ enum Engine {
         ctx.createCGImage(img, from: img.extent, format: .RGBA8, colorSpace: look.space)
     }
 
+    /// 8-bit RGB TIFF, uncompressed (what pastes everywhere), without an alpha channel: a quarter smaller than RGBA.
+    static func tiffRGB(_ img: CIImage, _ look: PPLook) -> Data? {
+        ctx.tiffRepresentation(of: img, format: .RGBX8, colorSpace: look.space)
+    }
+
     static func heic10(_ img: CIImage, _ look: PPLook, quality: Float) throws -> Data {
         let key = CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String)
         return try ctx.heif10Representation(of: img, colorSpace: look.space, options: [key: quality])

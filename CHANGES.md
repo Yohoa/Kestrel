@@ -6,6 +6,10 @@ Newest first. Dates are when the change was made.
 
 - **Import your own LUTs**: choose a folder of `.cube` files again, with a way to set the input space (camera log) of a LUT whose name doesn't say it. Overrides kept outside the app (never inside it).
 
+## Unreleased (since 1.5.2)
+
+- **⌘C copies the edited photo as HEIC** by default: 10-bit, a few MB (4.3 MB for a 24 MP photo) instead of a ~96 MB TIFF. An app that only takes TIFF gets an 8-bit one, made when it pastes. Settings ▸ Export ▸ "⌘C copies the edited photo as" switches back to TIFF (lossless, now without the unused alpha channel).
+
 ## 1.5.2 — 2026-10-28
 
 - **JPGs without a RAW**: a JPG is shown when no RAW of the same name sits next to it (RAW + JPG pairs still show once, as the RAW). Exposure, white balance (with Pick neutral and Auto WB), contrast and looks work on it; "As shot" is the picture as it is (6500 K / 0); highlight recovery does not apply.
