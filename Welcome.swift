@@ -57,8 +57,10 @@ struct WelcomeView: View {
             HStack {
                 Toggle("Show a tip at launch", isOn: Binding(get: { m.showTipsAtLaunch }, set: { m.showTipsAtLaunch = $0 }))
                     .toggleStyle(.checkbox).font(.caption)
+                    .help("A tip each time Kestrel starts; Help ▸ Tips shows them any time")
                 Spacer()
                 Button("Open Folder…") { m.sheet = nil; DispatchQueue.main.async { m.openFolder(recursive: m.includeSubfolders) } }
+                    .help("Close this and choose a folder of RAW files")
                 Button("Start") { m.sheet = nil }.keyboardShortcut(.defaultAction)
             }
         }

@@ -23,28 +23,35 @@ extension ContentView {
     var statusBarContent: some View {
         HStack(spacing: 9) {
             Button { m.step(-1) } label: { hitTarget(Image(systemName: "chevron.left")) }
-                .buttonStyle(.plain).disabled((m.currentIndex ?? 0) == 0)
+                .buttonStyle(.plain).disabled((m.currentIndex ?? 0) == 0).help("Previous photo (←)")
             Text(m.currentIndex.map { "\($0 + 1)/\(m.files.count)" } ?? "–/\(m.files.count)")
                 .font(.system(size: 12).monospacedDigit()).lineLimit(1).fixedSize().frame(minWidth: 50)
+                .help("Position of this photo among the shown photos")
             Button { m.step(1) } label: { hitTarget(Image(systemName: "chevron.right")) }
-                .buttonStyle(.plain).disabled(m.currentIndex.map { $0 >= m.files.count - 1 } ?? true)
+                .buttonStyle(.plain).disabled(m.currentIndex.map { $0 >= m.files.count - 1 } ?? true).help("Next photo (→)")
             Text(m.current?.lastPathComponent ?? "").font(.system(size: 12, design: .monospaced)).lineLimit(1).truncationMode(.middle)
+                .help(m.current?.path ?? "")
             Text(m.imageSize).font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary).lineLimit(1).fixedSize()
+                .help("Size of the photo in pixels")
             Divider()
             Button { m.nudgeExposure(NSEvent.modifierFlags.contains(.shift) ? -1 : -1.0 / 3) } label: { hitTarget(Image(systemName: "minus.square")) }.buttonStyle(.plain)
+                .help("Exposure −⅓ EV (⇧-click: −1 EV)")
             Text(String(format: "%+.2f EV", m.exposure)).font(.system(size: 12).monospacedDigit()).lineLimit(1).fixedSize()
+                .help("Exposure of this photo. A sets it to 0, ⇧A meters it automatically")
             Button { m.nudgeExposure(NSEvent.modifierFlags.contains(.shift) ? 1 : 1.0 / 3) } label: { hitTarget(Image(systemName: "plus.square")) }.buttonStyle(.plain)
+                .help("Exposure +⅓ EV (⇧-click: +1 EV)")
             Menu("\(m.wbIsCustom ? "WB" : "As shot") \(Int(m.temperature))K/\(Int(m.tint))") {
                 ForEach(WBPreset.all) { p in Button(p.name) { m.applyWBPreset(p) } }
                 Divider()
                 Button("Pick neutral…") { m.pickingWB = true }
             }
             .fixedSize()
+            .help("White balance in Kelvin / tint: pick a preset, or a neutral spot on the photo (W steps through them)")
             Divider()
             ratingControls
             Divider()
-            indicator("O", on: m.showOver) { m.toggleOver() }
-            indicator("U", on: m.showUnder) { m.toggleUnder() }
+            indicator("O", on: m.showOver) { m.toggleOver() }.help("Show blown highlights in red (O)")
+            indicator("U", on: m.showUnder) { m.toggleUnder() }.help("Show crushed shadows in blue (U)")
             // follows a pinch or drag live (the zoom state is its own observable)
             Observing(m.zoomState) { _ in indicator(m.zoomLabel, on: m.zoomed) { m.toggleZoom() } }
                 .overlay {
@@ -64,8 +71,8 @@ extension ContentView {
             }
             Divider()
             if m.exporting {
-                ProgressView(value: m.progress).frame(width: 80)
-                Button("Cancel") { m.cancelExport() }.controlSize(.small)
+                ProgressView(value: m.progress).frame(width: 80).help("Export progress")
+                Button("Cancel") { m.cancelExport() }.controlSize(.small).help("Stop the export (photos already written are kept)")
             }
             Button { withAnimation(LayoutStore.spring) { m.toggle(.filmstrip) } } label: {
                 Image(systemName: "film").foregroundStyle(m.shown(.filmstrip) ? Color.accentColor : .secondary)
@@ -74,11 +81,13 @@ extension ContentView {
             .help(m.shown(.filmstrip) ? "Fold the filmstrip (F6)" : "Show the filmstrip (F6)")
             Button { m.toggleGrid() } label: { Image(systemName: m.viewMode == .grid ? "photo" : "square.grid.2x2") }
                 .buttonStyle(.plain).help(m.viewMode == .grid ? "Single photo (G)" : "Grid view (G)")
-            if m.viewMode == .grid { Slider(value: $m.gridCell, in: 120...360).frame(width: 90) }
+            if m.viewMode == .grid { Slider(value: $m.gridCell, in: 120...360).frame(width: 90).help("Thumbnail size") }
             Text("\(m.shownPhotos.count)/\(m.library.count)\(m.filter.isActive ? " filtered" : "")\(m.rejectedHidden > 0 ? " · \(m.rejectedHidden) rejected hidden" : "")")
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(m.filter.isActive ? Color.accentColor : .secondary)
+                .help(m.filter.isActive ? "Shown / all photos in the folder. Sort & Filter is hiding some: V switches the filter off" : "Shown / all photos in the folder")
             Text(m.status).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail).layoutPriority(-1)
+                .help(m.status)
             Spacer(minLength: 6)
             Button("Export As…") { m.exportCurrent() }.glassButton().disabled(m.current == nil || m.exporting)
                 .help("This photo with its look, to a place you choose (⌘E)")
@@ -99,7 +108,7 @@ extension ContentView {
             ForEach(1...5, id: \.self) { i in
                 Button { m.setRating(i) } label: {
                     hitTarget(Image(systemName: i <= (p?.rating ?? 0) ? "star.fill" : "star").font(.system(size: 11)).foregroundStyle(.orange), width: 14)
-                }.buttonStyle(.plain)
+                }.buttonStyle(.plain).help("\(i) star\(i == 1 ? "" : "s") (\(i)); again to clear")
             }
             Button { m.setRating(-1) } label: {
                 hitTarget(Image(systemName: p?.isRejected == true ? "xmark.circle.fill" : "xmark.circle").foregroundStyle(.red), width: 18)
@@ -108,7 +117,7 @@ extension ContentView {
                 Button { m.setLabel(n) } label: {
                     hitTarget(Circle().fill(labelColor(n)).frame(width: 10, height: 10)
                         .overlay(Circle().stroke(Color.primary.opacity(p?.label == n ? 1 : 0.15), lineWidth: 2)), width: 12)
-                }.buttonStyle(.plain)
+                }.buttonStyle(.plain).help(n == "Purple" ? "Label Purple; again to clear" : "Label \(n) (\(labelNames.firstIndex(of: n)! + 6)); again to clear")
             }
         }
         .disabled(m.current == nil)
@@ -138,14 +147,16 @@ extension ContentView {
                     Text("The looks ticked in the LUT panel (\(m.batchPPs.count)), each photo once per look").tag(false)
                 }
                 .pickerStyle(.radioGroup).labelsHidden().frame(maxWidth: .infinity, alignment: .leading)
+                .help("Which look each exported photo gets")
             }
 
             GroupBox("Sidecar") {
                 Toggle("Copy the .xmp next to each export", isOn: $m.copySidecar).frame(maxWidth: .infinity, alignment: .leading)
+                    .help("Puts a copy of the photo's .xmp (rating, label, settings) beside each HEIC")
             }
             GroupBox("Quality") {
                 HStack {
-                    Slider(value: $m.quality, in: 0.5...1)
+                    Slider(value: $m.quality, in: 0.5...1).help("HEIC quality: higher is larger and finer")
                     Text(String(format: "%.2f", m.quality)).monospacedDigit()
                 }
             }
@@ -155,19 +166,21 @@ extension ContentView {
                         ForEach(OutputMode.allCases) { Text($0.title).tag($0) }
                     }
                     .labelsHidden()
+                    .help("Where the exported files go")
                     Toggle("Put each look in its own folder (PP3/, Fujifilm-ASTIA/ …)", isOn: $m.groupByLook).font(.caption)
+                        .help("A subfolder per look inside the output folder")
                     if m.outputMode.needsFolder {
                         Text(m.customOut?.path ?? "No folder chosen").font(.caption).lineLimit(2).truncationMode(.middle)
                     }
                     HStack {
-                        Button("Choose…") { m.chooseOutput() }
+                        Button("Choose…") { m.chooseOutput() }.help("Choose the output folder")
                         Menu("Recent") {
                             ForEach(m.recentOutputs, id: \.self) { u in
                                 Button(u.deletingLastPathComponent().lastPathComponent + "/" + u.lastPathComponent) { m.useOutput(u) }
                             }
                         }
-                        .disabled(m.recentOutputs.isEmpty)
-                        if m.customOut != nil { Button("Reset") { m.customOut = nil } }
+                        .disabled(m.recentOutputs.isEmpty).help("Output folders used before")
+                        if m.customOut != nil { Button("Reset") { m.customOut = nil }.help("Forget the chosen folder") }
                     }
                 }
                 .frame(maxWidth: .infinity, alignment: .leading)

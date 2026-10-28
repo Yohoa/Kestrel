@@ -594,6 +594,7 @@ struct GridCell: View, Equatable {
             Text(photo.name).font(.system(size: 11, design: .monospaced)).lineLimit(1)
         }
         .padding(3)
+        .help(photo.name + " — double-click to open, ⌘-click to add to the selection, ⇧-click for a range, right-click for more")
         .background(isSelected ? Color.accentColor.opacity(0.28) : (isCurrent ? Color.primary.opacity(0.10) : .clear))   // selected = background
         .onHover { inside in if markBox { if inside { store.hovered = photo.url } else if store.hovered == photo.url { store.hovered = nil } } }
         .task { store.ensure(photo.url) }

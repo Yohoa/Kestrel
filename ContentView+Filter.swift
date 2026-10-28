@@ -22,6 +22,7 @@ extension ContentView {
                 .contentShape(Rectangle())
             }
             .buttonStyle(.plain).foregroundStyle(.secondary).frame(height: 20)
+            .help(folded ? "Show this group" : "Fold this group")
             if !folded { rows() }
         }
     }
@@ -49,7 +50,7 @@ extension ContentView {
         .buttonStyle(.plain)
         .disabled(!tickable || !enabled)
         .opacity(enabled ? 1 : 0.5)
-        .help(help ?? "")
+        .help(help ?? (tickable ? "Tick to show only these photos; tick more rows to widen, untick all to show everything. Shown / total" : "Shown / total"))
     }
 
     /// FRV gear options: zero rows hide (when off) only once all metadata is read; a ticked row never hides.
@@ -121,8 +122,10 @@ extension ContentView {
                         Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
                         TextField("Name, or a mask like *_07*", text: $m.filter.name).textFieldStyle(.roundedBorder)
                             .onSubmit { m.mainWindow?.makeFirstResponder(nil) }
+                            .help("Part of the file name, a camera or lens name, or a mask with * and ?")
                         if !f.name.isEmpty {
                             Button { m.filter.name = "" } label: { Image(systemName: "xmark.circle.fill") }.buttonStyle(.plain).foregroundStyle(.secondary)
+                                .help("Clear the name filter")
                         }
                     }
                     .font(.system(size: 11)).padding(.bottom, 2)

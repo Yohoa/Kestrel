@@ -169,6 +169,7 @@ struct PanelBox<Trailing: View, Content: View>: View {
         VStack(spacing: 0) {
             HStack(spacing: 8) {
                 Text(title).font(.system(size: 13, weight: .semibold)).lineLimit(1)
+                    .help(panel == nil ? "" : "Drag the title to move this panel to another place or column")
                 Spacer(minLength: 4)
                 trailing
                 if let p = panel {
@@ -180,6 +181,7 @@ struct PanelBox<Trailing: View, Content: View>: View {
                 }
                 Button(action: onClose) { Image(systemName: "xmark").font(.system(size: 10, weight: .bold)) }
                     .buttonStyle(.plain).foregroundStyle(.secondary)
+                    .help(panel.map { "Close this panel (the Panels menu or F\($0.fKey)\($0.needsShift ? " with ⇧" : "") brings it back)" } ?? "Close")
             }
             .padding(.horizontal, 10)
             .frame(height: 28)

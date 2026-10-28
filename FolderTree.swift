@@ -151,6 +151,7 @@ struct FolderTreeRow: View {
                             .font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary).frame(width: 14, height: 14)
                     }
                     .buttonStyle(.plain)
+                    .help(expanded ? "Collapse" : "Show the subfolders")
                 } else {
                     Color.clear.frame(width: 14, height: 14)
                 }
@@ -167,6 +168,7 @@ struct FolderTreeRow: View {
             .padding(.vertical, 3).padding(.horizontal, 4)
             .background(RoundedRectangle(cornerRadius: 5).fill(isCurrent ? Color.accentColor.opacity(0.25) : .clear))
             .contentShape(Rectangle())
+            .help(node.url.path + " — click to open, right-click to refresh, rename or show in Finder")
             .onTapGesture { m.load([node.url]) }
             .contextMenu { menu(expanded: expanded) }
             .id(path)

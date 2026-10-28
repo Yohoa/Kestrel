@@ -32,6 +32,7 @@ struct FilmstripView: View {
                                  markBox: m.advancedSelection, onMark: { m.toggleMark(p.url) })
                             .equatable()
                             .id(p.url)
+                            .help(p.name + " — ⌘-click to add to the selection, ⇧-click for a range, right-click for more")
                             .onTapGesture {
                                 if p.url != m.current { strip.clicked = true }      // unchanged: no follow() would reset it
                                 m.click(p.url, command: NSEvent.modifierFlags.contains(.command), shift: NSEvent.modifierFlags.contains(.shift))
@@ -83,6 +84,7 @@ struct XMPFieldList: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 3) {
             Button(m.xmpShowFields ? "Hide all XMP properties" : "Show all XMP properties (\(m.xmpFields.count))") { m.xmpShowFields.toggle() }
+                .help("Every property in the sidecar, read-only")
                 .controlSize(.small)
             if m.xmpShowFields {
                 ForEach(Array(m.xmpFields.enumerated()), id: \.offset) { _, kv in
@@ -107,6 +109,7 @@ struct SettingsView: View {
             Section("Startup") {
                 Toggle("Show a tip at launch", isOn: Binding(get: { m.showTipsAtLaunch }, set: { m.showTipsAtLaunch = $0 }))
                 Toggle("Open the last folder when the app starts", isOn: $m.openLastFolder)
+                    .help("Off: the app starts empty (a window opened with ⌘N always starts empty)")
                 Toggle("Include subfolders when opening a folder", isOn: $m.includeSubfolders)
                     .onChange(of: m.includeSubfolders) { _, _ in m.includeSubfoldersChanged() }
             }
@@ -142,6 +145,7 @@ struct SettingsView: View {
                     Text("Current photo").tag(1)
                     Text("Both").tag(2)
                 }
+                .help("When a group is selected but the photo on screen is not part of it, what ratings and labels from the keyboard act on")
             }
             Section("Window") {
                 Picker("Theme", selection: $m.theme) {
@@ -152,15 +156,16 @@ struct SettingsView: View {
                 .pickerStyle(.segmented)
                 HStack {
                     Text("Window tint")
-                    Slider(value: $m.windowTint, in: 0...0.8)
+                    Slider(value: $m.windowTint, in: 0...0.8).help("How much colour the window background takes from the desktop behind it")
                     Text(m.windowTint == 0 ? "clear" : String(format: "%.0f %%", m.windowTint * 100)).monospacedDigit()
                 }
                 HStack {
                     Text("Photo stage")
-                    Slider(value: $m.stageOpacity, in: 0...1)
+                    Slider(value: $m.stageOpacity, in: 0...1).help("How solid the dark area behind the photo is")
                     Text(String(format: "%.0f %%", m.stageOpacity * 100)).monospacedDigit()
                 }
                 Button("Reset panel layout") { m.resetLayout() }
+                    .help("Every panel back to its default column, order and size")
             }
             Section("Grid view") {
                 HStack {
@@ -224,7 +229,7 @@ struct UpdateSettings: View {
                 Text(updater.lastCheck.map { "Last checked " + $0.formatted(date: .abbreviated, time: .shortened) } ?? "Not checked yet")
                     .font(.caption).foregroundStyle(.secondary)
                 Spacer()
-                Button("Check Now") { m.checkForUpdates() }
+                Button("Check Now") { m.checkForUpdates() }.help("Look for a newer release on GitHub now")
             }
             Text("Kestrel \(Updater.currentVersion). New versions come from github.com/\(Updater.repo)/releases and are checked before they replace this one.")
                 .font(.caption).foregroundStyle(.secondary)

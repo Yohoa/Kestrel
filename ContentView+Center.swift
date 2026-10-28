@@ -26,7 +26,7 @@ extension ContentView {
             }
             HStack(spacing: 12) {
                 Button { m.open() } label: { Label("Open…", systemImage: "folder").padding(.horizontal, 8) }
-                    .glassButton(prominent: true).controlSize(.large)
+                    .glassButton(prominent: true).controlSize(.large).help("Open a folder or RAW files (⌘O)")
                 Menu {
                     ForEach(m.recentInputs, id: \.self) { u in
                         Button(u.deletingLastPathComponent().lastPathComponent + "/" + u.lastPathComponent) { m.load([u]) }
@@ -35,9 +35,10 @@ extension ContentView {
                     Button("Clear History") { m.clearHistory() }
                 } label: { Label("History", systemImage: "clock.arrow.circlepath") }
                     .menuStyle(.button).controlSize(.large).fixedSize()
-                    .disabled(m.recentInputs.isEmpty)
+                    .disabled(m.recentInputs.isEmpty).help("Folders opened before")
             }
             Toggle("Include subfolders", isOn: $m.includeSubfolders).toggleStyle(.checkbox).font(.caption)
+                .help("Also show the photos in the folders inside the one you open")
         }
     }
 
@@ -107,18 +108,19 @@ extension ContentView {
         Divider()
         Button { m.quickExport() } label: { Label("Quick Export", systemImage: "square.and.arrow.up") }.disabled(m.exporting)
             .help("No dialog: into the folder the Export settings name (a HEIC folder next to the RAW by default)")
-        Button("Export As…") { m.exportCurrent() }.disabled(m.exporting)
+        Button("Export As…") { m.exportCurrent() }.disabled(m.exporting).help("Asks where to save this photo as a 10-bit HEIC (⌘E)")
         Button { m.copyImageToClipboard() } label: { Label("Copy Edited Photo", systemImage: "doc.on.doc") }
             .help("The photo as developed here (look, exposure, white balance), full size, for pasting elsewhere")
         Divider()
         Button { m.undo.undo() } label: { Label(m.undo.undoTitle.map { "Undo \($0)" } ?? "Undo", systemImage: "arrow.uturn.backward") }
-            .disabled(m.undo.undoTitle == nil)
+            .disabled(m.undo.undoTitle == nil).help("⌘Z")
         Button { m.undo.redo() } label: { Label(m.undo.redoTitle.map { "Redo \($0)" } ?? "Redo", systemImage: "arrow.uturn.forward") }
-            .disabled(m.undo.redoTitle == nil)
+            .disabled(m.undo.redoTitle == nil).help("⇧⌘Z")
         Divider()
         Button { m.moveToRejected() } label: {
             Label(ts.count > 1 ? "Move \(ts.count) Photos to \(Model.rejectedFolderName)" : "Move to \(Model.rejectedFolderName)", systemImage: "archivebox")
         }
+        .help("Moves the RAW and its .xmp into a _Rejected folder next to it (⇧⌘⌫); ⌘Z moves it back")
         Button("Reveal in Finder") { if let c = m.current { m.revealInFinder(c) } }
     }
 
@@ -151,6 +153,7 @@ extension ContentView {
                 Text(hint).foregroundStyle(.secondary)
                 if !m.includeSubfolders {
                     Button("Include subfolders") { m.includeSubfolders = true; m.includeSubfoldersChanged() }
+                        .help("Show the photos in the folders inside this one too")
                 }
             }
         } else {
@@ -166,6 +169,7 @@ extension ContentView {
             VStack(spacing: 6) {
                 HStack {
                     Text(m.look.title).font(.system(size: 12, weight: .semibold)).lineLimit(1)
+                        .help("The look (LUT) on this photo; pick another in the LUT panel, or [ ] to step")
                     if m.lutInput(m.ppID) != nil { LUTInputLine(m: m, lookID: m.ppID) }
                     Spacer()
                 }
@@ -181,8 +185,10 @@ extension ContentView {
                 HStack {
                     Toggle("Highlight recovery", isOn: $m.highlightRecovery).font(.caption)
                         .onChange(of: m.highlightRecovery) { _, _ in m.developChanged() }
+                        .help("Brings back detail in bright areas that would otherwise clip to white")
                     Spacer()
                     Button("Reset") { m.resetAdjustments(); m.developChanged() }.controlSize(.small)
+                        .help("Exposure, contrast and highlight recovery back to their defaults")
                 }
                 ViewThatFits(in: .horizontal) {                  // narrow column: Copy / Paste move into Apply to…
                     HStack(spacing: 6) { developMenus(compact: false); Spacer(); copyPaste }
@@ -200,11 +206,11 @@ extension ContentView {
                    format: String, unit: String = "", reset: (() -> Void)? = nil) -> some View {
         let stepped = Binding(get: { value.wrappedValue }, set: { value.wrappedValue = ($0 / step).rounded() * step })
         return HStack(spacing: 6) {
-            Text(title).font(.caption).frame(width: 52, alignment: .leading)
+            Text(title).font(.caption).frame(width: 52, alignment: .leading).help(Self.adjustTip(title))
             Slider(value: stepped, in: range) { editing in
                 if editing { m.beginSliderDrag() } else { m.endSliderDrag(); m.developChanged() }   // live while dragging
             }
-            .controlSize(.small)
+            .controlSize(.small).help(Self.adjustTip(title))
             ValueField(value: value, range: range, step: typedStep ?? step, dragStep: step, format: format, unit: unit,
                        onDragBegin: { m.beginSliderDrag() }, onDragEnd: { m.endSliderDrag(); m.developChanged() },
                        onReset: reset) { m.developChanged() }
@@ -224,6 +230,7 @@ extension ContentView {
             }
         }
         .fixedSize().disabled(m.current == nil)
+        .help("Meter the exposure automatically (⇧A), for this photo, the selection or every shown photo")
         Menu(m.hasGroup ? "Apply to… (\(m.selection.count))" : "Apply to…") {
             Button("Selection (\(m.selection.count))") { m.applyCurrentSettings(to: m.actionTargets()) }.disabled(!m.hasGroup)
             Button("Every shown photo (\(m.files.count))") { m.applyCurrentSettings(to: m.files) }
@@ -234,6 +241,17 @@ extension ContentView {
             }
         }
         .fixedSize().disabled(m.current == nil)
+        .help("Give the selection or every shown photo this photo's settings (exposure, contrast, white balance, look)")
+    }
+
+    static func adjustTip(_ title: String) -> String {
+        switch title {
+        case "Exposure": "Brightness in EV stops. A sets 0, ⇧A meters automatically, ⌥+ / ⌥− step"
+        case "Temp": "White balance colour temperature in Kelvin: lower is bluer, higher warmer"
+        case "Tint": "White balance tint: minus is greener, plus more magenta"
+        case "Contrast": "FastRawViewer contrast grade −5…+5 in 0.1 steps; K / ⇧K move ½ grade"
+        default: title
+        }
     }
 
     @ViewBuilder var copyPaste: some View {
@@ -245,7 +263,7 @@ extension ContentView {
     }
 
     /// The spinner shown while the picture for a newly selected photo is on its way.
-    var loadingBadge: some View { ProgressView().controlSize(.small).padding(10).glassCapsule().padding(8) }
+    var loadingBadge: some View { ProgressView().controlSize(.small).padding(10).glassCapsule().padding(8).help("Rendering the photo…") }
 
     // MARK: grid view
 

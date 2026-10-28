@@ -12,6 +12,7 @@ extension ContentView {
         VStack(spacing: 0) {
             HStack {
                 Button { m.open() } label: { Label("Open…", systemImage: "folder") }.glassButton().focusable(false)
+                    .help("Open a folder or RAW files (⌘O)")
                 Menu {
                     ForEach(m.recentInputs, id: \.self) { u in
                         Button(u.deletingLastPathComponent().lastPathComponent + "/" + u.lastPathComponent) { m.load([u]) }
@@ -19,12 +20,13 @@ extension ContentView {
                     Divider()
                     Button("Clear history") { m.clearHistory() }
                 } label: { Label("History", systemImage: "clock.arrow.circlepath") }
-                    .disabled(m.recentInputs.isEmpty)
+                    .disabled(m.recentInputs.isEmpty).help("Folders opened before")
             }
             .padding([.top, .horizontal], 6)
             Toggle("Include subfolders", isOn: $m.includeSubfolders)
                 .font(.caption).padding(.horizontal, 8).padding(.vertical, 3)
                 .onChange(of: m.includeSubfolders) { _, _ in m.includeSubfoldersChanged() }
+                .help("Also show the photos in the folders inside the one you open")
         }
     }
 
@@ -76,6 +78,7 @@ extension ContentView {
                 Label(u.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"), systemImage: "folder.fill")
                     .lineLimit(1).truncationMode(.middle)
                     .contentShape(Rectangle())
+                    .help("Click to open \(u.path). Right-click to remove")
                     .onTapGesture { m.load([u]) }
                     .contextMenu { Button("Remove") { m.removeFavorite(u) } }
             }
@@ -132,6 +135,7 @@ extension ContentView {
             }
         } label: { Image(systemName: "ellipsis.circle") }
         .menuStyle(.borderlessButton).fixedSize().disabled(m.current == nil)
+        .help("Import from the sidecar, fill the draft, or show the .xmp in Finder")
     }
 
     var xmpEditor: some View {
@@ -140,7 +144,7 @@ extension ContentView {
                 ForEach(1...5, id: \.self) { i in
                     Button { m.xmpDraft.rating = m.xmpDraft.rating == i ? 0 : i } label: {
                         Image(systemName: i <= m.xmpDraft.rating ? "star.fill" : "star").foregroundStyle(.orange)
-                    }.buttonStyle(.plain)
+                    }.buttonStyle(.plain).help("Draft rating: \(i) star\(i == 1 ? "" : "s") (click again to clear)")
                 }
                 Button { m.xmpDraft.rating = m.xmpDraft.rating == -1 ? 0 : -1 } label: {
                     Image(systemName: "xmark.circle\(m.xmpDraft.rating == -1 ? ".fill" : "")").foregroundStyle(.red)
@@ -150,7 +154,7 @@ extension ContentView {
                     Text("No label").tag("")
                     ForEach(labelNames, id: \.self) { Text($0).tag($0) }
                 }
-                .labelsHidden().frame(width: 100)
+                .labelsHidden().frame(width: 100).help("Draft colour label")
             }
             xmpField("libraw:Exposure", "EV", $m.xmpDraft.exposure)
             xmpField("crs:Exposure2012", "EV", $m.xmpDraft.adobeExposure)
@@ -167,8 +171,8 @@ extension ContentView {
                         Text("\(c.tag): \(c.old) → \(c.new)").font(.system(size: 10, design: .monospaced))
                     }
                     HStack {
-                        Button("Write to XMP") { m.writeXMPDraft() }.controlSize(.small)
-                        Button("Revert") { m.revertXMPDraft() }.controlSize(.small)
+                        Button("Write to XMP") { m.writeXMPDraft() }.controlSize(.small).help("Save the changes above into the .xmp sidecar")
+                        Button("Revert") { m.revertXMPDraft() }.controlSize(.small).help("Throw the draft away and show the sidecar as it is")
                     }
                 }
             }
@@ -178,7 +182,7 @@ extension ContentView {
             ForEach(m.xmpIssues, id: \.self) { Label($0, systemImage: "exclamationmark.triangle").font(.caption).foregroundStyle(.orange) }
 
             if let line = m.xmpDevelopLine {
-                Text(line).font(.caption2).foregroundStyle(.secondary)
+                Text(line).font(.caption2).foregroundStyle(.secondary).help("Kestrel's develop settings stored in this sidecar")
             }
 
             XMPFieldList(m: m)
@@ -188,8 +192,19 @@ extension ContentView {
     func xmpField(_ tag: String, _ unit: String, _ text: Binding<String>) -> some View {
         HStack {
             Text(tag).font(.system(size: 11, design: .monospaced)).foregroundStyle(.secondary).frame(width: 118, alignment: .leading)
-            TextField("", text: text).textFieldStyle(.roundedBorder).frame(width: 90)
+                .help(Self.xmpTagTip(tag))
+            TextField("", text: text).textFieldStyle(.roundedBorder).frame(width: 90).help(Self.xmpTagTip(tag))
             Text(unit).font(.caption).foregroundStyle(.secondary)
+        }
+    }
+
+    static func xmpTagTip(_ tag: String) -> String {
+        switch tag {
+        case "libraw:Exposure": "Exposure as FastRawViewer writes it (EV)"
+        case "crs:Exposure2012": "Exposure as Lightroom / Camera Raw writes it (EV)"
+        case "crs:Temperature": "White balance temperature as Lightroom writes it (K)"
+        case "crs:Tint": "White balance tint as Lightroom writes it"
+        default: tag
         }
     }
 

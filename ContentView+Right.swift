@@ -35,14 +35,16 @@ extension ContentView {
         }
         .background(Color.black.opacity(0.35))
         .padding(4)
+        .help("RGB histogram of the raw data in EV (−9 … +3). EV0 is the clipping point, UE the under-exposure limit")
     }
 
     var statsView: some View {
         Grid(horizontalSpacing: 18, verticalSpacing: 4) {
             GridRow {
                 Text(m.hist?.circleMasked == true ? "lens disc" : "").font(.system(size: 9)).foregroundStyle(.secondary)
-                Text("UnExp").foregroundStyle(.secondary)
-                Text("OvExp").foregroundStyle(.secondary)
+                    .help(m.hist?.circleMasked == true ? "A fisheye image circle was found: only the inside is counted" : "")
+                Text("UnExp").foregroundStyle(.secondary).help("Share of pixels per channel below the under-exposure limit")
+                Text("OvExp").foregroundStyle(.secondary).help("Share of pixels per channel that clip (blown)")
             }
             ForEach(0..<3, id: \.self) { c in
                 let color: Color = [Color.red, .green, .blue][c]
@@ -86,6 +88,7 @@ extension ContentView {
             ForEach(WBPreset.all) { p in Button(p.name) { m.applyWBPreset(p) } }
         }
         .fixedSize()
+        .help("White balance presets (W steps through them)")
     }
 
     func pickNeutral(label: Bool) -> some View {
@@ -99,11 +102,12 @@ extension ContentView {
 
     var wbAsShot: some View {
         Button("As shot") { m.resetWB(); m.developChanged() }.controlSize(.small).fixedSize().disabled(!m.wbIsCustom)
+            .help("Back to the camera's white balance")
     }
 
     func wbTempField(_ w: CGFloat) -> some View {
         HStack(spacing: 4) {
-            Text("Temp").font(.caption).fixedSize()
+            Text("Temp").font(.caption).fixedSize().help(Self.adjustTip("Temp"))
             ValueField(value: $m.temperature, range: 2000...12000, step: 1, dragStep: 50, format: "%.0f", unit: "",
                        onDragBegin: { m.beginSliderDrag() }, onDragEnd: { m.endSliderDrag(); m.developChanged() },
                        onReset: { m.resetWB(); m.developChanged() }) { m.developChanged() }
@@ -114,7 +118,7 @@ extension ContentView {
 
     func wbTintField(_ w: CGFloat) -> some View {
         HStack(spacing: 4) {
-            Text("Tint").font(.caption).fixedSize()
+            Text("Tint").font(.caption).fixedSize().help(Self.adjustTip("Tint"))
             ValueField(value: $m.tint, range: -150...150, step: 1, dragStep: 1, format: "%+.0f", unit: "",
                        onDragBegin: { m.beginSliderDrag() }, onDragEnd: { m.endSliderDrag(); m.developChanged() },
                        onReset: { m.resetWB(); m.developChanged() }) { m.developChanged() }
@@ -135,6 +139,7 @@ extension ContentView {
             Button("Every shown photo (\(m.files.count))") { copyWB(to: m.files) }
         }
         .fixedSize().controlSize(.small).disabled(m.current == nil)
+        .help("Give the selection or every shown photo this white balance (as numbers)")
     }
 
     func copyWB(to urls: [URL]) { m.copyWhiteBalance(to: urls) }
@@ -150,6 +155,7 @@ extension ContentView {
                 }
                 .padding(8)
                 Text(lutFooter).font(.caption2).foregroundStyle(.secondary).padding(.bottom, 6)
+                    .help("Ticked looks are the ones Export uses when it exports once per look (Export settings)")
             }
             .overlay(alignment: .top) { NoticeView(center: m.notices, place: .lut) }
         }
@@ -196,6 +202,7 @@ extension ContentView {
             Button("None") { m.batchPPs = [] }
         } label: { Image(systemName: "gearshape") }
         .menuStyle(.borderlessButton).fixedSize()
+        .help("Thumbnail size, favourites only, and which looks are ticked for export")
     }
 
     /// Right-click on a look thumbnail.
@@ -232,6 +239,7 @@ extension ContentView {
                     set: { if $0 { m.batchPPs.insert(look.id) } else { m.batchPPs.remove(look.id) } }
                 ))
                 .labelsHidden().padding(3)
+                .help("Tick to include this look when exporting once per look")
                 HStack {
                     Spacer()
                     Button { m.toggleFavoriteLook(look.id) } label: {
@@ -240,6 +248,7 @@ extension ContentView {
                             .shadow(radius: 2)
                     }
                     .buttonStyle(.plain).padding(4)
+                    .help(m.isFavorite(look.id) ? "Remove from favourites" : "Add to favourites")
                 }
             }
             Text(look.title).font(.caption2).lineLimit(2).multilineTextAlignment(.center)

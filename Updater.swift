@@ -241,11 +241,11 @@ struct UpdateView: View {
                 ScrollView { Text(Self.whatsNew(r.notes)).font(.system(size: 12)).frame(maxWidth: .infinity, alignment: .leading).textSelection(.enabled) }
                     .frame(height: 220)
                 HStack {
-                    Button("Skip This Version") { updater.skip(r); close() }
-                    Button("Release Page") { NSWorkspace.shared.open(r.page) }
+                    Button("Skip This Version") { updater.skip(r); close() }.help("Don't offer this version again; a later one will still be offered")
+                    Button("Release Page") { NSWorkspace.shared.open(r.page) }.help("Open the release on GitHub in the browser")
                     Spacer()
-                    Button("Later") { updater.phase = .idle; close() }
-                    Button("Install and Relaunch") { updater.install(r) }.keyboardShortcut(.defaultAction)
+                    Button("Later") { updater.phase = .idle; close() }.help("Ask again at the next check")
+                    Button("Install and Relaunch") { updater.install(r) }.help("Download, check its checksum and signature, replace this copy (the old one goes to the Trash) and restart").keyboardShortcut(.defaultAction)
                 }
             case .downloading(let f):
                 ProgressView(value: f) { Text("Downloading…").font(.caption) }
