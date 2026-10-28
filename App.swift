@@ -202,20 +202,26 @@ final class Model: ObservableObject {
         UserDefaults.standard.set(favorites.map(\.path), forKey: "favoriteFolders")
         recentInputs = recent
         UserDefaults.standard.set(recentInputs.map(\.path), forKey: Self.inputsKey)
-        FolderNode.home.relistLoaded()
-        FolderVolumes.shared.nodes.forEach { $0.relistLoaded() }
+        relistFolderTree()
         // the folder being browsed was in it (or was it): open it again where it is now
         if let b = browsing { load([b]) }
         status = "Renamed “\(old.lastPathComponent)” to “\(name)”"
         notify(.folderRenamed, status, icon: "pencil")
     }
 
+    /// The top level is listed even if it never was (an empty tree); below it only what was listed already, so a
+    /// refresh never reaches into folders the tree has not shown.
+    func relistFolderTree() {
+        for n in [FolderNode.home] + FolderVolumes.shared.nodes {
+            if n.children == nil { n.loadChildren() } else { n.relistLoaded() }
+        }
+    }
+
     /// The Folders panel's refresh: the home folder, the mounted volumes and every folder opened in the tree, listed
     /// again. What is expanded and the current folder stay as they are.
     func refreshFolderTree() {
-        FolderNode.home.relistLoaded()
         FolderVolumes.shared.refresh()
-        FolderVolumes.shared.nodes.forEach { $0.relistLoaded() }
+        relistFolderTree()
         status = "Folders refreshed"
         notify(.foldersRefreshed, "Folders refreshed", icon: "arrow.clockwise")
     }

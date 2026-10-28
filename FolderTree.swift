@@ -23,7 +23,7 @@ final class FolderNode: ObservableObject, Identifiable, Hashable {
 
     /// This folder and every folder below it that has been listed already (opened in the tree), listed again.
     func relistLoaded() {
-        guard let kids = children else { loadChildren(); return }          // never listed yet: list it now
+        guard let kids = children else { return }          // never listed: a collapsed row lists itself when it appears
         relist()
         kids.forEach { $0.relistLoaded() }
     }

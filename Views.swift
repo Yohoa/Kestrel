@@ -32,7 +32,7 @@ struct FilmstripView: View {
                                  markBox: m.advancedSelection, onMark: { m.toggleMark(p.url) })
                             .equatable()
                             .id(p.url)
-                            .help(p.name + " — ⌘-click to add to the selection, ⇧-click for a range, right-click for more")
+                            .help(p.name + " — ⌘-click to add or remove from the selection, ⇧-click for a range, right-click for more")
                             .onTapGesture {
                                 if p.url != m.current { strip.clicked = true }      // unchanged: no follow() would reset it
                                 m.click(p.url, command: NSEvent.modifierFlags.contains(.command), shift: NSEvent.modifierFlags.contains(.shift))

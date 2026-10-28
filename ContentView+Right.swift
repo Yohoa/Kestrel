@@ -88,7 +88,7 @@ extension ContentView {
             ForEach(WBPreset.all) { p in Button(p.name) { m.applyWBPreset(p) } }
         }
         .fixedSize()
-        .help("White balance presets (W steps through them)")
+        .help("White balance presets (W switches As Shot → Daylight → Auto → Custom)")
     }
 
     func pickNeutral(label: Bool) -> some View {

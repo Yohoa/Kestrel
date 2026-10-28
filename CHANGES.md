@@ -6,7 +6,7 @@ Newest first. Dates are when the change was made.
 
 - **Import your own LUTs**: choose a folder of `.cube` files again, with a way to set the input space (camera log) of a LUT whose name doesn't say it. Overrides kept outside the app (never inside it).
 
-## Unreleased (since 1.5)
+## 1.5.1 — 2026-10-28
 
 - **Favorite folders**: the header star is filled when the folder on screen is a favourite, and a click removes it again.
 - **Hover tips** on nearly every control: status bar, panel headers, Develop / White Balance rows, filter rows, LUT cells, folder rows, Export and Settings.

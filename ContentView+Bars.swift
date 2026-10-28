@@ -37,7 +37,7 @@ extension ContentView {
             Button { m.nudgeExposure(NSEvent.modifierFlags.contains(.shift) ? -1 : -1.0 / 3) } label: { hitTarget(Image(systemName: "minus.square")) }.buttonStyle(.plain)
                 .help("Exposure −⅓ EV (⇧-click: −1 EV)")
             Text(String(format: "%+.2f EV", m.exposure)).font(.system(size: 12).monospacedDigit()).lineLimit(1).fixedSize()
-                .help("Exposure of this photo. A sets it to 0, ⇧A meters it automatically")
+                .help("Exposure of this photo. A sets it to 0 (A again restores it), ⇧A meters it automatically")
             Button { m.nudgeExposure(NSEvent.modifierFlags.contains(.shift) ? 1 : 1.0 / 3) } label: { hitTarget(Image(systemName: "plus.square")) }.buttonStyle(.plain)
                 .help("Exposure +⅓ EV (⇧-click: +1 EV)")
             Menu("\(m.wbIsCustom ? "WB" : "As shot") \(Int(m.temperature))K/\(Int(m.tint))") {
@@ -46,7 +46,7 @@ extension ContentView {
                 Button("Pick neutral…") { m.pickingWB = true }
             }
             .fixedSize()
-            .help("White balance in Kelvin / tint: pick a preset, or a neutral spot on the photo (W steps through them)")
+            .help("White balance in Kelvin / tint: pick a preset, or a neutral spot on the photo (W switches As Shot → Daylight → Auto → Custom)")
             Divider()
             ratingControls
             Divider()
@@ -108,7 +108,7 @@ extension ContentView {
             ForEach(1...5, id: \.self) { i in
                 Button { m.setRating(i) } label: {
                     hitTarget(Image(systemName: i <= (p?.rating ?? 0) ? "star.fill" : "star").font(.system(size: 11)).foregroundStyle(.orange), width: 14)
-                }.buttonStyle(.plain).help("\(i) star\(i == 1 ? "" : "s") (\(i)); again to clear")
+                }.buttonStyle(.plain).help("\(i) star\(i == 1 ? "" : "s") (\(i)); 0 clears")
             }
             Button { m.setRating(-1) } label: {
                 hitTarget(Image(systemName: p?.isRejected == true ? "xmark.circle.fill" : "xmark.circle").foregroundStyle(.red), width: 18)

@@ -120,7 +120,7 @@ extension ContentView {
         Button { m.moveToRejected() } label: {
             Label(ts.count > 1 ? "Move \(ts.count) Photos to \(Model.rejectedFolderName)" : "Move to \(Model.rejectedFolderName)", systemImage: "archivebox")
         }
-        .help("Moves the RAW and its .xmp into a _Rejected folder next to it (⇧⌘⌫); ⌘Z moves it back")
+        .help("Moves the photo(s) and their .xmp into a _Rejected folder next to them (⇧⌘⌫); ⌘Z moves them back")
         Button("Reveal in Finder") { if let c = m.current { m.revealInFinder(c) } }
     }
 
@@ -188,7 +188,7 @@ extension ContentView {
                         .help("Brings back detail in bright areas that would otherwise clip to white")
                     Spacer()
                     Button("Reset") { m.resetAdjustments(); m.developChanged() }.controlSize(.small)
-                        .help("Exposure, contrast and highlight recovery back to their defaults")
+                        .help("Exposure, contrast, highlight recovery and white balance back to their defaults (the look stays)")
                 }
                 ViewThatFits(in: .horizontal) {                  // narrow column: Copy / Paste move into Apply to…
                     HStack(spacing: 6) { developMenus(compact: false); Spacer(); copyPaste }
@@ -246,7 +246,7 @@ extension ContentView {
 
     static func adjustTip(_ title: String) -> String {
         switch title {
-        case "Exposure": "Brightness in EV stops. A sets 0, ⇧A meters automatically, ⌥+ / ⌥− step"
+        case "Exposure": "Brightness in EV stops. A sets 0 (A again restores it), ⇧A meters automatically, ⌥+ / ⌥− step"
         case "Temp": "White balance colour temperature in Kelvin: lower is bluer, higher warmer"
         case "Tint": "White balance tint: minus is greener, plus more magenta"
         case "Contrast": "FastRawViewer contrast grade −5…+5 in 0.1 steps; K / ⇧K move ½ grade"
