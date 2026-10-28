@@ -247,6 +247,7 @@ struct PanelCommands: Commands {
                 Button("Pick Neutral…") { m.pickingWB = true }
             }
             Toggle("Highlight Recovery", isOn: Binding(get: { m.highlightRecovery }, set: { m.highlightRecovery = $0; m.developChanged() }))
+                .disabled(m.current.map(BitmapPhoto.isBitmap) ?? false)        // a JPG has no highlights to recover
             Divider()
             Button("Copy Edited Photo    ⌘C") { m.copyImageToClipboard() }
             ForEach(ShortcutAction.allCases) { a in

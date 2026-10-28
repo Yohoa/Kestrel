@@ -957,15 +957,19 @@ final class Model: ObservableObject {
         }
         let ts = actionTargets()
         guard !ts.isEmpty else { return }
-        edit(ts) { s in
+        let g = "paste-" + UUID().uuidString                    // one undo step for both edits
+        edit(ts, group: g) { s in
             if parts.contains(.develop) { s.ev = c.ev; s.contrast = c.contrast; s.hl = c.hl }
             if parts.contains(.look) { s.look = c.look }
         }
         // white balance only onto the same kind: a RAW's Kelvin is the light, a JPG's is a shift of the picture
-        if parts.contains(.whiteBalance) {
-            edit(ts.filter { BitmapPhoto.isBitmap($0) == clipboardFromBitmap }) { s in s.temp = c.temp; s.tint = c.tint }
-        }
+        let wbTargets = parts.contains(.whiteBalance) ? ts.filter { BitmapPhoto.isBitmap($0) == clipboardFromBitmap } : []
+        edit(wbTargets, group: g) { s in s.temp = c.temp; s.tint = c.tint }
         status = "Pasted " + describe(parts, c) + " to \(ts.count) photo(s)"
+        if parts.contains(.whiteBalance), wbTargets.count < ts.count {
+            status += wbTargets.isEmpty ? " (white balance not: RAW and JPG keep their own)"
+                : " (white balance to \(wbTargets.count): RAW and JPG keep their own)"
+        }
         notify(.copyPaste, status, icon: "doc.on.clipboard")
         syncLookFromState()
         refreshAll()
@@ -1001,8 +1005,9 @@ final class Model: ObservableObject {
         if let u = current { ensureRead([u]) }
         let c = currentState
         let bitmap = current.map(BitmapPhoto.isBitmap) ?? false
-        edit(scope.filter { BitmapPhoto.isBitmap($0) == bitmap }) { $0 = c }
-        edit(scope.filter { BitmapPhoto.isBitmap($0) != bitmap }) { s in       // the other kind keeps its own WB
+        let g = "apply-" + UUID().uuidString                    // one undo step for both edits
+        edit(scope.filter { BitmapPhoto.isBitmap($0) == bitmap }, group: g) { $0 = c }
+        edit(scope.filter { BitmapPhoto.isBitmap($0) != bitmap }, group: g) { s in       // the other kind keeps its own WB
             let (t, ti) = (s.temp, s.tint); s = c; s.temp = t; s.tint = ti
         }
         status = "Applied current settings to \(scope.count) photo(s)"
@@ -1720,6 +1725,8 @@ final class Model: ObservableObject {
     nonisolated static func moveFiles(_ raws: [URL], into dir: (URL) -> URL) -> MoveResult {
         let fm = FileManager.default
         var r = MoveResult()
+        let chosen = Set(raws)                  // a JPG twin that is itself being moved goes as its own entry
+        var listings: [URL: [String]] = [:]     // each folder listed once, for the twins
         for u in raws {
             let d = dir(u)
             do {
@@ -1730,9 +1737,16 @@ final class Model: ObservableObject {
                 r.raws.append(u); r.files.append((u, dest))
                 // a.ARW + a.DNG share a.xmp: it goes with the first one. A RAW's JPG twin goes too, or the next
                 // load would list it in the RAW's place.
-                for c in [XMPFile.url(for: u), XMPFile.backupURL(for: u), XMPFile.oldBackupURL(for: u)] + jpgTwins(of: u) where fm.fileExists(atPath: c.path) {
+                for c in [XMPFile.url(for: u), XMPFile.backupURL(for: u), XMPFile.oldBackupURL(for: u)] where fm.fileExists(atPath: c.path) {
                     let cd = d.appendingPathComponent(c.lastPathComponent)
                     if !fm.fileExists(atPath: cd.path), (try? fm.moveItem(at: c, to: cd)) != nil { r.files.append((c, cd)) }
+                }
+                let folder = u.deletingLastPathComponent()
+                if listings[folder] == nil { listings[folder] = (try? fm.contentsOfDirectory(atPath: folder.path)) ?? [] }
+                for c in jpgTwins(of: u, in: listings[folder] ?? []) where !chosen.contains(c) && fm.fileExists(atPath: c.path) {
+                    let cd = d.appendingPathComponent(c.lastPathComponent)
+                    if fm.fileExists(atPath: cd.path) { r.failed.append("\(c.lastPathComponent) is already there"); continue }
+                    if (try? fm.moveItem(at: c, to: cd)) != nil { r.files.append((c, cd)) }
                 }
             } catch { r.failed.append("\(u.lastPathComponent): \(error.localizedDescription)") }
         }
@@ -1740,10 +1754,9 @@ final class Model: ObservableObject {
     }
 
     /// The camera's JPG of a RAW+JPG pair (same name, any case of .jpg / .jpeg), in the RAW's folder.
-    nonisolated static func jpgTwins(of raw: URL) -> [URL] {
+    nonisolated static func jpgTwins(of raw: URL, in names: [String]) -> [URL] {
         guard rawExtensions.contains(raw.pathExtension.lowercased()) else { return [] }
         let dir = raw.deletingLastPathComponent(), stem = raw.deletingPathExtension().lastPathComponent.lowercased()
-        let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
         return names.filter {
             let n = $0 as NSString
             return bitmapExtensions.contains(n.pathExtension.lowercased()) && n.deletingPathExtension.lowercased() == stem
@@ -1751,7 +1764,8 @@ final class Model: ObservableObject {
     }
 
     private func rejectedMoved(_ r: MoveResult, recordUndo: Bool) {
-        let gone = Set(r.raws)
+        // the RAWs and any JPG twin that was listed too (opened as files)
+        let gone = Set(r.raws).union(r.files.map(\.from).filter { libIndex[$0] != nil })
         let photos = library.filter { gone.contains($0.url) }
         let saved = states.filter { gone.contains($0.key) }
         removeFromLibrary(gone)
