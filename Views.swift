@@ -19,6 +19,7 @@ struct FilmstripView: View {
     final class StripState: ObservableObject {
         @Published var position: URL?          // the cell at the centre; SwiftUI scrolls there when it changes
         var lastIndex: Int?
+        var clicked = false                     // the current photo just changed by a click on a cell of the strip
     }
 
     var body: some View {
@@ -32,6 +33,7 @@ struct FilmstripView: View {
                             .equatable()
                             .id(p.url)
                             .onTapGesture {
+                                if p.url != m.current { strip.clicked = true }      // unchanged: no follow() would reset it
                                 m.click(p.url, command: NSEvent.modifierFlags.contains(.command), shift: NSEvent.modifierFlags.contains(.shift))
                             }
                             .contextMenu { menu(p.url) }
@@ -52,6 +54,14 @@ struct FilmstripView: View {
     private func follow(_ proxy: ScrollViewProxy, animated: Bool) {
         guard let cur = m.current else { return }
         let index = m.shownPhotos.firstIndex { $0.url == cur }
+        // A click on a cell: it is under the pointer, so only a cell cut off at an edge scrolls, just far enough to
+        // show it whole (centring moved it away from the pointer). Keys and swipes keep the photo in the centre.
+        if strip.clicked {
+            strip.clicked = false
+            strip.lastIndex = index
+            DispatchQueue.main.async { withAnimation(.easeOut(duration: 0.15)) { proxy.scrollTo(cur) } }
+            return
+        }
         let oneStep = animated && strip.lastIndex != nil && index != nil && abs(index! - strip.lastIndex!) == 1
         strip.lastIndex = index
         let move = {

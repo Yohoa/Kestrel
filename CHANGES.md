@@ -9,6 +9,7 @@ Newest first. Dates are when the change was made.
 ## Unreleased (since 1.4)
 
 - **Grid**: clicking a photo no longer centres it (so a double-click's second click no longer lands on another photo): a photo in full view stays put, one cut off at the top or bottom edge scrolls just enough to show it whole; moving with the keys does the same.
+- **Filmstrip**: a click works the same way (no jump to the centre; a cell cut off at the edge scrolls just enough); keys and swipes still keep the current photo centred.
 - The app is filed under **Photography**.
 
 ## 1.4 — 2026-10-28
