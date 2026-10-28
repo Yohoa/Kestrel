@@ -30,6 +30,9 @@ extension ContentView {
 
     var foldersPanel: some View {
         PanelBox("Folders", panel: .folders, onClose: { m.toggle(.folders) }, trailing: {
+            Button { m.refreshFolderTree() } label: { Image(systemName: "arrow.clockwise") }
+                .buttonStyle(.plain).foregroundStyle(.secondary)
+                .help("Refresh: list the folders and volumes again (new, renamed or removed folders)")
             Menu {
                 Picker("Open a folder with", selection: $m.subfolderScope) {
                     Text("This folder only").tag(0)

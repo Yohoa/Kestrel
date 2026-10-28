@@ -21,6 +21,13 @@ final class FolderNode: ObservableObject, Identifiable, Hashable {
         relist()
     }
 
+    /// This folder and every folder below it that has been listed already (opened in the tree), listed again.
+    func relistLoaded() {
+        guard let kids = children else { return }
+        relist()
+        kids.forEach { $0.relistLoaded() }
+    }
+
     /// Lists the subfolders again (after they changed on disk); child nodes that are still there are kept.
     func relist() {
         guard !listing else { relistAgain = true; return }      // run again once the current listing is done

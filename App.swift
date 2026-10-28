@@ -128,6 +128,16 @@ final class Model: ObservableObject {
         set { folderTree.expanded = newValue }
     }
 
+    /// The Folders panel's refresh: the home folder, the mounted volumes and every folder opened in the tree, listed
+    /// again. What is expanded and the current folder stay as they are.
+    func refreshFolderTree() {
+        FolderNode.home.relistLoaded()
+        FolderVolumes.shared.refresh()
+        FolderVolumes.shared.nodes.forEach { $0.relistLoaded() }
+        status = "Folders refreshed"
+        notify(.foldersRefreshed, "Folders refreshed", icon: "arrow.clockwise")
+    }
+
     /// Unfolds the folder tree down to `folder` (its parent folders; the folder itself stays as the user left it).
     func revealInTree(_ folder: URL?) {
         guard var u = folder?.standardizedFileURL.deletingLastPathComponent() else { return }
