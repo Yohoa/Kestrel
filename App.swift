@@ -2828,33 +2828,12 @@ final class Model: ObservableObject {
                 let item = NSPasteboardItem()
                 if let file { item.setString(file.absoluteString, forType: .fileURL) }
                 item.setData(data, forType: NSPasteboard.PasteboardType(format.type.identifier))
-                if format != .tiff {
-                    // An app that only takes TIFF would get macOS's own conversion: from the 10-bit HEIC 16-bit and
-                    // uncompressed, ~200 MB at 24 MP. It gets Kestrel's 8-bit RGB one instead, made on request.
-                    item.setDataProvider(ClipboardTIFF.shared.holding(data), forTypes: [.tiff])
-                }
                 NSPasteboard.general.writeObjects([item])
                 let dims = "\(Int(size.width)) × \(Int(size.height))", mb = String(format: "%.1f MB", Double(data.count) / 1e6)
                 self.status = "Copied the edited \(name) · \(look.title) (\(dims), \(format.title) \(mb)) to the clipboard"
                 self.notify(.copyPhoto, "Edited photo copied · \(look.title) · \(dims) · \(format.title) \(mb)", icon: "doc.on.doc")
             }
         }
-    }
-
-    /// Makes the TIFF of a copied HEIC or JPG only when an app asks for it, from that file itself.
-    final class ClipboardTIFF: NSObject, NSPasteboardItemDataProvider {
-        static let shared = ClipboardTIFF()
-        private var heic: Data?                 // the HEIC or JPG
-        func holding(_ d: Data) -> Self { heic = d; return self }
-
-        func pasteboard(_ pasteboard: NSPasteboard?, item: NSPasteboardItem, provideDataForType type: NSPasteboard.PasteboardType) {
-            guard type == .tiff, let heic, let img = CIImage(data: heic, options: [.applyOrientationProperty: true]),
-                  let tiff = Engine.ctx.tiffRepresentation(of: img, format: .RGBX8, colorSpace: img.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!)
-            else { return }
-            item.setData(tiff, forType: .tiff)
-        }
-
-        func pasteboardFinishedWithDataProvider(_ pasteboard: NSPasteboard) { heic = nil }
     }
 
     private func export(_ url: URL, look: PPLook, to dest: URL) {

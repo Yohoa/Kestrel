@@ -212,7 +212,7 @@ struct SettingsView: View {
                     Text("JPG (8-bit, small, opens anywhere)").tag(Model.CopyFormat.jpg)
                     Text("TIFF (lossless, large)").tag(Model.CopyFormat.tiff)
                 }
-                .help("HEIC and JPG: a few MB, at the quality above. TIFF: 8-bit and lossless, ~25 MB or more for 24 MP. With HEIC or JPG, an app that only takes TIFF still gets an 8-bit TIFF, made when it pastes. The file is on the clipboard too: Finder pastes it, Mail attaches it.")
+                .help("HEIC and JPG: a few MB, at the quality above. TIFF: 8-bit and lossless, ~25 MB or more for 24 MP. The file is on the clipboard too: Finder pastes it, Mail attaches it.")
             }
         }
         .formStyle(.grouped)
