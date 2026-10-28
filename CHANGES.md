@@ -6,6 +6,11 @@ Newest first. Dates are when the change was made.
 
 - **Import your own LUTs**: choose a folder of `.cube` files again, with a way to set the input space (camera log) of a LUT whose name doesn't say it. Overrides kept outside the app (never inside it).
 
+## Unreleased (since 1.4)
+
+- **Grid**: clicking a photo no longer scrolls the grid (it used to centre the photo, so a double-click's second click landed on another one); moving with the keys scrolls only as far as needed.
+- The app is filed under **Photography**.
+
 ## 1.4 — 2026-10-28
 
 - **Updates**: Kestrel ▸ Check for Updates…, and a check once a day (Settings ▸ Updates). A new version is downloaded from the GitHub release, checked against its SHA-256 and the signing certificate, put in place and relaunched.
