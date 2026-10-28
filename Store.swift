@@ -2,7 +2,26 @@ import Foundation
 
 // MARK: - Photos
 
-let rawExtensions: Set<String> = ["arw", "raf", "cr2", "dng"]
+/// Every camera RAW format macOS's RAW engine (CIRAWFilter / ImageIO) knows, by extension: the ones whose system type
+/// conforms to public.camera-raw-image. Whether a particular camera model decodes is up to macOS.
+let rawExtensions: Set<String> = [
+    "arw", "srf", "sr2",                // Sony
+    "raf",                              // Fujifilm
+    "cr2", "cr3", "crw",                // Canon
+    "nef", "nrw",                       // Nikon
+    "orf",                              // Olympus / OM System
+    "rw2", "raw", "rwl",                // Panasonic, Leica
+    "pef",                              // Pentax
+    "dng",                              // Adobe DNG (Leica, Ricoh, phones …)
+    "srw",                              // Samsung
+    "3fr", "fff",                       // Hasselblad
+    "iiq",                              // Phase One
+    "erf",                              // Epson
+    "mos",                              // Leaf
+    "mrw",                              // Konica Minolta
+    "dcr",                              // Kodak
+    "gpr",                              // GoPro
+]
 
 struct Photo: Identifiable, Equatable {
     let url: URL
@@ -203,7 +222,7 @@ struct FilterState: Equatable {
     var labels: Set<String> = []       // "None" = not set
     var dates: Set<DateBucket> = []
     var looks: Set<LookKind> = []
-    var kinds: Set<String> = []        // "ARW", "RAF", "CR2", "DNG"
+    var kinds: Set<String> = []        // "ARW", "RAF", "CR2", "DNG" …
     var selectedOnly = false
     var hideRejected = true
     var name = ""                      // substring or * mask on the file name, or on camera / lens; kept by V and Reset

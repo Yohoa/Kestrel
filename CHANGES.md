@@ -6,9 +6,9 @@ Newest first. Dates are when the change was made.
 
 - **Import your own LUTs**: choose a folder of `.cube` files again, with a way to set the input space (camera log) of a LUT whose name doesn't say it. Overrides kept outside the app (never inside it).
 
-## Unreleased (since 1.5.1)
+## 1.5.2 — 2026-10-28
 
-- **Canon CR2**: opened, shown, filtered (File type ▸ CR2), graded and exported like ARW / RAF / DNG; Kestrel is offered in Finder's Open With for .CR2.
+- **Every RAW format macOS reads**: besides ARW, RAF and DNG, now Canon CR2 / CR3 / CRW, Nikon NEF / NRW, Olympus ORF, Panasonic RW2 / RAW, Leica RWL, Pentax PEF, Samsung SRW, Sony SRF / SR2, Hasselblad 3FR / FFF, Phase One IIQ, Epson ERF, Leaf MOS, Minolta MRW, Kodak DCR and GoPro GPR (which camera models decode is up to macOS). Sort & Filter ▸ File type lists the types in the folder; Finder's Open With offers Kestrel for any RAW file.
 
 ## 1.5.1 — 2026-10-28
 
