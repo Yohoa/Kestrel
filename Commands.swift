@@ -294,10 +294,6 @@ struct PanelCommands: Commands {
 
         // Looks (LUT switching)
         CommandMenu("Looks") {
-            Button(m.usingBuiltInLUTs ? "✓ Built-in LUTs (V-Log Alchemy)" : "Built-in LUTs (V-Log Alchemy)") { m.useBuiltInLUTs() }
-                .disabled(Model.builtInLUTFolder == nil || m.usingBuiltInLUTs)
-            Button("Choose LUT Folder…") { m.chooseLUTFolder() }
-            Divider()
             Button("Next Look    ]") { m.stepLook(1) }
             Button("Previous Look    [") { m.stepLook(-1) }
             Button("Next Favourite Look    }") { m.stepFavoriteLook(1) }
@@ -310,8 +306,6 @@ struct PanelCommands: Commands {
                 Button("★ \(look.title)") { m.favoriteLook(i + 1) }
                     .keyboardShortcut(KeyEquivalent(Character(String(i + 1))), modifiers: .control)
             }
-            Divider()
-            Button("Choose LUT Folder…") { m.chooseLUTFolder() }
         }
 
         // Panels

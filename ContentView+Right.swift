@@ -151,16 +151,13 @@ extension ContentView {
                 .padding(8)
                 Text(lutFooter).font(.caption2).foregroundStyle(.secondary).padding(.bottom, 6)
             }
-            .onDrop(of: [.fileURL], isTargeted: nil) { providers in dropFiles(providers, intoLUTs: true) }
             .overlay(alignment: .top) { NoticeView(center: m.notices, place: .lut) }
         }
     }
 
     var lutFooter: String {
         var s = "\(m.batchPPs.count) ticked for export"
-        if m.usingBuiltInLUTs { s += " · \(m.luts.count) built-in LUT(s) from V-Log Alchemy" }
-        else if let f = m.lutFolder { s += " · \(m.luts.count) LUT(s) from \(f.lastPathComponent)" }
-        else { s += " · drop a folder of .cube LUTs here" }
+        s += " · \(m.luts.count) built-in LUTs (V-Log Alchemy)"
         return s
     }
 
@@ -191,17 +188,6 @@ extension ContentView {
                 Text("Small").tag(3)
             }
             Toggle("Favourites only", isOn: $m.favoriteLooksOnly)
-            Divider()
-            Button("Choose LUT folder…") { m.chooseLUTFolder() }
-            Button(m.usingBuiltInLUTs ? "✓ Built-in LUTs (V-Log Alchemy)" : "Built-in LUTs (V-Log Alchemy)") { m.useBuiltInLUTs() }
-                .disabled(Model.builtInLUTFolder == nil || m.usingBuiltInLUTs)
-            Menu("Recent LUT folders") {
-                ForEach(m.recentLUTFolders, id: \.self) { u in
-                    Button(u.deletingLastPathComponent().lastPathComponent + "/" + u.lastPathComponent) { m.loadLUTFolder(u, remember: true) }
-                }
-            }
-            .disabled(m.recentLUTFolders.isEmpty)
-            if m.lutFolder != nil { Button("Clear LUTs") { m.clearLUTs() } }
             Divider()
             Text("Tick looks to export:")
             Button("Favourite looks") { m.tickFavoriteLooks() }

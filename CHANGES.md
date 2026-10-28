@@ -13,7 +13,8 @@ Newest first. Dates are when the change was made.
   - Help (F1 / ⌘K) lists the menu shortcuts too, what acts on the photo or the selection, Esc, ⌘N and the files Kestrel writes.
   - RAWs and folders open from Finder (Open With, the Dock icon) into the one window.
   - A recorded shortcut that a menu already uses is refused.
-  - Setting a LUT's input space by hand is hidden for now; the sidecar backup is now `.xmp.kestrel-backup`.
+  - The sidecar backup is now `.xmp.kestrel-backup`.
+- **LUTs**: only the 27 built-in LUTs for now (their names say which camera log they expect, so there is nothing to set); choosing a LUT folder of your own, and setting a LUT's input by hand, will come back later.
 
 ## 1.3 — 2026-10-28
 

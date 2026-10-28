@@ -482,15 +482,9 @@ final class Model: ObservableObject {
     struct ThumbKey: Hashable { let photo: PhotoKey; let looksVersion: Int }
 
     init() {
-        // the folder chosen last, else the old default place, else the LUTs that come with the app
-        let fm = FileManager.default
-        let fallback = fm.homeDirectoryForCurrentUser.appendingPathComponent("Pictures/ARWExport-LUTs").path
-        let saved = UserDefaults.standard.string(forKey: Self.lutFolderKey).flatMap { fm.fileExists(atPath: $0) ? $0 : nil }
-        if let p = saved ?? (fm.fileExists(atPath: fallback) ? fallback : nil) {
-            loadLUTFolder(URL(fileURLWithPath: p), remember: false)
-        } else if let b = Self.builtInLUTFolder {
-            loadLUTFolder(b, remember: false)
-        }
+        // Only the LUTs that come with the app, for now: they all say in their names which camera log they expect,
+        // so nothing has to be set by hand. Adding LUTs of one's own comes later.
+        if let b = Self.builtInLUTFolder { loadLUTFolder(b, remember: false) }
         AppDelegate.model = self
         layoutStore.model = self
         if !AppDelegate.pendingOpen.isEmpty {                   // opened from Finder: that, not the last folder
@@ -1954,22 +1948,13 @@ final class Model: ObservableObject {
     /// The LUTs that come with the app (V-Log Alchemy, Apache-2.0), laid out as in a LUT folder of one's own, so a
     /// look saved in an .xmp ("lut:Fujifilm/…") is found in either. Read-only: input overrides for them are kept on
     /// this Mac.
-    static var builtInLUTFolder: URL? {
+    nonisolated static var builtInLUTFolder: URL? {
         guard let u = Bundle.main.resourceURL?.appendingPathComponent("LUTs/V-Log Alchemy", isDirectory: true),
               FileManager.default.fileExists(atPath: u.path) else { return nil }
         return u
     }
     var usingBuiltInLUTs: Bool { lutFolder.map { $0.standardizedFileURL == Self.builtInLUTFolder?.standardizedFileURL } ?? false }
 
-    func useBuiltInLUTs() { if let b = Self.builtInLUTFolder { loadLUTFolder(b, remember: false) } }
-
-    func chooseLUTFolder() {
-        let p = NSOpenPanel()
-        p.canChooseFiles = false
-        p.canChooseDirectories = true
-        p.message = "Choose a folder containing .cube LUTs"
-        if p.runModal() == .OK, let u = p.url { loadLUTFolder(u, remember: true) }
-    }
 
     /// Where a LUT's input space comes from: its file name ("…_VLog"), a setting made by hand, or neither (assumed).
     enum LUTInputSource { case fileName, manual, assumed }
@@ -2011,7 +1996,8 @@ final class Model: ObservableObject {
                 r.sources[look.id] = manual != nil ? .manual : guess != nil ? .fileName : .assumed
             } catch { r.skipped.append("\(u.lastPathComponent): \(error.localizedDescription)") }
         }
-        if inFolder != before { writeLUTInputs(inFolder, to: folder) }
+        // never write inside the app (the built-in folder): it would break its signature
+        if inFolder != before, folder.standardizedFileURL != builtInLUTFolder?.standardizedFileURL { writeLUTInputs(inFolder, to: folder) }
         return r
     }
 
@@ -2041,9 +2027,6 @@ final class Model: ObservableObject {
         lutInputSources = scan.sources
         lutFolder = folder
         looksChanged()
-        // the built-in set is the default anyway: not saved, so a moved or updated app still finds its own
-        if folder.standardizedFileURL == Self.builtInLUTFolder?.standardizedFileURL { UserDefaults.standard.removeObject(forKey: Self.lutFolderKey) }
-        else { UserDefaults.standard.set(folder.path, forKey: Self.lutFolderKey) }
         if doRemember { remember(&recentLUTFolders, Self.lutFoldersKey, [folder]) }
         if let k = keepKey, let id = lookID(forKey: k) { ppID = id } else if !looks.contains(where: { $0.id == ppID }) { ppID = 2 }
         if UserDefaults.standard.stringArray(forKey: "exportLooks") != nil { restoreBatchLooks() }
@@ -2068,13 +2051,6 @@ final class Model: ObservableObject {
         thumbCache.removeAll()
     }
 
-    func clearLUTs() {
-        luts = []; lutURLs = [:]; lutFolder = nil
-        looksChanged()
-        UserDefaults.standard.removeObject(forKey: Self.lutFolderKey)
-        if ppID >= 100 { ppID = 2 }
-        batchPPs = batchPPs.filter { $0 < 100 }
-    }
 
     var currentLUTInput: SceneSpace? {
         if case .lut(_, let s) = look.kind { return s }
@@ -2089,35 +2065,7 @@ final class Model: ObservableObject {
         return (s, lutInputSources[id] ?? .assumed, Scenes.guessInput(fromFileName: url.lastPathComponent))
     }
 
-    /// Sets the input space of LUT `id` (the current look by default) by hand. The same as the file name says is
-    /// not a setting: it is removed from kestrel-lut-inputs.json, which keeps only real overrides.
-    func setLUTInput(_ space: SceneSpace, for lookID: Int? = nil) {
-        let id = lookID ?? ppID
-        guard let url = lutURLs[id], let f = lutFolder else { return }
-        let guess = Scenes.guessInput(fromFileName: url.lastPathComponent)
-        let byName = guess?.name == space.name
-        notify(.lutInput, "\(url.deletingPathExtension().lastPathComponent) expects \(space.name)" + (byName ? " (from file name)" : " (manual)"),
-               icon: "camera.filters")
-        var m = Self.readLUTInputs(f); m[relativePath(url)] = byName ? nil : space.name
-        var s = savedLUTInputs
-        if Self.writeLUTInputs(m, to: f) { s[url.path] = nil }
-        else if byName { s[url.path] = nil }
-        else { s[url.path] = space.name; status = "LUT folder is read-only: \(space.name) is kept on this Mac only" }
-        savedLUTInputs = s
-        loadLUTFolder(f, remember: false)
-    }
 
-    /// Drops the hand-made input of LUT `id`: back to what its file name says (or the assumed default).
-    func useFileNameInput(for lookID: Int? = nil) {
-        let id = lookID ?? ppID
-        guard let url = lutURLs[id], let f = lutFolder else { return }
-        var m = Self.readLUTInputs(f); m[relativePath(url)] = nil
-        Self.writeLUTInputs(m, to: f)
-        var s = savedLUTInputs; s[url.path] = nil; savedLUTInputs = s
-        let g = Scenes.guessInput(fromFileName: url.lastPathComponent)
-        notify(.lutInput, "\(url.deletingPathExtension().lastPathComponent): input from the file name" + (g.map { " (\($0.name))" } ?? ""), icon: "camera.filters")
-        loadLUTFolder(f, remember: false)
-    }
 
     // MARK: selecting a photo and rendering
 

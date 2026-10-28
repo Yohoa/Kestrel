@@ -77,7 +77,7 @@ struct ContentView: View {
             case .tips: TipsView(m: m)
             }
         }
-        .onDrop(of: [.fileURL], isTargeted: nil) { providers in dropFiles(providers, intoLUTs: false) }
+        .onDrop(of: [.fileURL], isTargeted: nil) { providers in dropFiles(providers) }
     }
 
     // MARK: columns built from the (rearrangeable) layout
@@ -220,7 +220,7 @@ struct ContentView: View {
         }
     }
 
-    func dropFiles(_ providers: [NSItemProvider], intoLUTs: Bool) -> Bool {
+    func dropFiles(_ providers: [NSItemProvider]) -> Bool {
         let group = DispatchGroup()
         let lock = NSLock()
         var urls: [URL] = []
@@ -234,15 +234,7 @@ struct ContentView: View {
         group.notify(queue: .main) {
             MainActor.assumeIsolated {
                 guard !urls.isEmpty else { return }
-                if intoLUTs {
-                    var isDir: ObjCBool = false
-                    if let first = urls.first {
-                        FileManager.default.fileExists(atPath: first.path, isDirectory: &isDir)
-                        m.loadLUTFolder(isDir.boolValue ? first : first.deletingLastPathComponent(), remember: true)
-                    }
-                } else {
-                    m.load(urls)
-                }
+                m.load(urls)
             }
         }
         return true
