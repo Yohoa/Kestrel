@@ -158,7 +158,8 @@ extension ContentView {
 
     var lutFooter: String {
         var s = "\(m.batchPPs.count) ticked for export"
-        if let f = m.lutFolder { s += " · \(m.luts.count) LUT(s) from \(f.lastPathComponent)" }
+        if m.usingBuiltInLUTs { s += " · \(m.luts.count) built-in LUT(s) from V-Log Alchemy" }
+        else if let f = m.lutFolder { s += " · \(m.luts.count) LUT(s) from \(f.lastPathComponent)" }
         else { s += " · drop a folder of .cube LUTs here" }
         return s
     }
@@ -192,6 +193,8 @@ extension ContentView {
             Toggle("Favourites only", isOn: $m.favoriteLooksOnly)
             Divider()
             Button("Choose LUT folder…") { m.chooseLUTFolder() }
+            Button(m.usingBuiltInLUTs ? "✓ Built-in LUTs (V-Log Alchemy)" : "Built-in LUTs (V-Log Alchemy)") { m.useBuiltInLUTs() }
+                .disabled(Model.builtInLUTFolder == nil || m.usingBuiltInLUTs)
             Menu("Recent LUT folders") {
                 ForEach(m.recentLUTFolders, id: \.self) { u in
                     Button(u.deletingLastPathComponent().lastPathComponent + "/" + u.lastPathComponent) { m.loadLUTFolder(u, remember: true) }

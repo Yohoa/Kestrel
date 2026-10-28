@@ -9,6 +9,7 @@ swiftc -O -j"$(sysctl -n hw.ncpu)" -swift-version 5 -parse-as-library ColorMath.
 cp Info.plist "$APP/Contents/Info.plist"
 mkdir -p "$APP/Contents/Resources"
 cp AppIcon.icns "$APP/Contents/Resources/"
+ditto LUTs "$APP/Contents/Resources/LUTs"            # the built-in LUTs (V-Log Alchemy, Apache-2.0)
 # Sign with the self-signed "Yohoa Studio" certificate when this Mac has it (a stable identity keeps macOS
 # privacy permissions across rebuilds); otherwise ad-hoc.
 if security find-identity -p codesigning | grep -q '"Yohoa Studio"'; then

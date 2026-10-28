@@ -159,7 +159,7 @@ struct PanelCommands: Commands {
         add("Raw Alchemy", link: "https://github.com/shenmintao/raw-alchemy")
         add(" by shenmintao: the RAW → camera log → LUT pipeline and the Auto EV metering modes it is modelled on.\n")
         add("V-Log Alchemy", link: "https://github.com/shenmintao/V-Log-Alchemy")
-        add(" by shenmintao: the V-Log LUTs Kestrel is used with (Apache-2.0).\n")
+        add(" by shenmintao: the built-in V-Log LUTs (Apache-2.0, licence in the app's Resources/LUTs).\n")
         add("FastRawViewer", link: "https://www.fastrawviewer.com")
         add(": the workflow and shortcuts it imitates.\n")
         add("Icon: William Yarrell, A History of British Birds (1843), public domain.")

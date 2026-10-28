@@ -444,9 +444,14 @@ final class Model: ObservableObject {
     struct ThumbKey: Hashable { let photo: PhotoKey; let looksVersion: Int }
 
     init() {
-        let fallback = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent("Pictures/ARWExport-LUTs").path
-        if let p = UserDefaults.standard.string(forKey: Self.lutFolderKey) ?? (FileManager.default.fileExists(atPath: fallback) ? fallback : nil) {
+        // the folder chosen last, else the old default place, else the LUTs that come with the app
+        let fm = FileManager.default
+        let fallback = fm.homeDirectoryForCurrentUser.appendingPathComponent("Pictures/ARWExport-LUTs").path
+        let saved = UserDefaults.standard.string(forKey: Self.lutFolderKey).flatMap { fm.fileExists(atPath: $0) ? $0 : nil }
+        if let p = saved ?? (fm.fileExists(atPath: fallback) ? fallback : nil) {
             loadLUTFolder(URL(fileURLWithPath: p), remember: false)
+        } else if let b = Self.builtInLUTFolder {
+            loadLUTFolder(b, remember: false)
         }
         AppDelegate.model = self
         layoutStore.model = self
@@ -1887,6 +1892,18 @@ final class Model: ObservableObject {
         set { UserDefaults.standard.set(newValue, forKey: Self.lutInputsKey) }
     }
 
+    /// The LUTs that come with the app (V-Log Alchemy, Apache-2.0), laid out as in a LUT folder of one's own, so a
+    /// look saved in an .xmp ("lut:Fujifilm/…") is found in either. Read-only: input overrides for them are kept on
+    /// this Mac.
+    static var builtInLUTFolder: URL? {
+        guard let u = Bundle.main.resourceURL?.appendingPathComponent("LUTs/V-Log Alchemy", isDirectory: true),
+              FileManager.default.fileExists(atPath: u.path) else { return nil }
+        return u
+    }
+    var usingBuiltInLUTs: Bool { lutFolder.map { $0.standardizedFileURL == Self.builtInLUTFolder?.standardizedFileURL } ?? false }
+
+    func useBuiltInLUTs() { if let b = Self.builtInLUTFolder { loadLUTFolder(b, remember: false) } }
+
     func chooseLUTFolder() {
         let p = NSOpenPanel()
         p.canChooseFiles = false
@@ -1965,7 +1982,9 @@ final class Model: ObservableObject {
         lutInputSources = scan.sources
         lutFolder = folder
         looksChanged()
-        UserDefaults.standard.set(folder.path, forKey: Self.lutFolderKey)
+        // the built-in set is the default anyway: not saved, so a moved or updated app still finds its own
+        if folder.standardizedFileURL == Self.builtInLUTFolder?.standardizedFileURL { UserDefaults.standard.removeObject(forKey: Self.lutFolderKey) }
+        else { UserDefaults.standard.set(folder.path, forKey: Self.lutFolderKey) }
         if doRemember { remember(&recentLUTFolders, Self.lutFoldersKey, [folder]) }
         if let k = keepKey, let id = lookID(forKey: k) { ppID = id } else if !looks.contains(where: { $0.id == ppID }) { ppID = 2 }
         batchPPs = batchPPs.filter { id in looks.contains { $0.id == id } }
