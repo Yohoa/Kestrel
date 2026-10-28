@@ -228,7 +228,7 @@ extension ContentView {
             Button("Every shown photo (\(m.files.count))") { m.applyCurrentSettings(to: m.files) }
             if compact {
                 Divider()
-                Button("Copy settings (⌘C)") { m.copySettings() }
+                ForEach(ShortcutAction.allCases) { a in Button(a.menuTitle) { m.perform(a) } }
                 Button("Paste settings (⌘V)") { m.pasteSettings() }
             }
         }
@@ -236,8 +236,11 @@ extension ContentView {
     }
 
     @ViewBuilder var copyPaste: some View {
-        Button("Copy") { m.copySettings() }.controlSize(.small).fixedSize()
-        Button("Paste") { m.pasteSettings() }.controlSize(.small).fixedSize()
+        Menu("Copy") {
+            ForEach(ShortcutAction.allCases) { a in Button(a.menuTitle) { m.perform(a) } }
+        } primaryAction: { m.copySettings() }                         // a click copies everything
+            .controlSize(.small).fixedSize().help("Click: copy all settings. ▾: Develop, White Balance or LUT only")
+        Button("Paste") { m.pasteSettings() }.controlSize(.small).fixedSize().help("Paste the copied settings (⌘V)")
     }
 
     /// The spinner shown while the picture for a newly selected photo is on its way.

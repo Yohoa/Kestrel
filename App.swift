@@ -295,7 +295,8 @@ final class Model: ObservableObject {
     /// Only these — a photo merely missing from `states` is never stripped.
     private var undoneToNothing: Set<URL> = []
     private var saveTask: Task<Void, Never>?
-    private var clipboard: PhotoState?
+    private var clipboard: (state: PhotoState, parts: Set<CopyPart>)?
+    let shortcuts = ShortcutStore()
     @Published var meteringMode: MeteringMode = MeteringMode(rawValue: UserDefaults.standard.string(forKey: "meteringMode") ?? "") ?? .matrix {
         didSet { UserDefaults.standard.set(meteringMode.rawValue, forKey: "meteringMode") }
     }
@@ -806,23 +807,47 @@ final class Model: ObservableObject {
 
     // Copy / paste of develop settings
 
-    func copySettings() {
+    /// Copies the chosen parts of the photo on screen's settings (all of them by default). White balance is copied
+    /// as numbers, as Copy WB does: an as-shot source gives its as-shot Kelvin / tint.
+    func copySettings(_ parts: Set<CopyPart> = Set(CopyPart.allCases)) {
         guard let c = current else { return }
         ensureRead([c])
-        clipboard = currentState
-        status = "Copied settings (\(String(format: "%+.2f", currentState.ev)) EV\(currentState.temp.map { ", \(Int($0)) K" } ?? ""))"
+        var s = currentState
+        if parts.contains(.whiteBalance), s.temp == nil, let a = asShot { s.temp = a.temp; s.tint = a.tint }
+        clipboard = (s, parts)
+        status = "Copied " + describe(parts, s)
         notify(.copyPaste, status, icon: "doc.on.doc")
     }
 
+    /// ⌘V: whatever was copied, and only that, to the selection (or the photo on screen).
     func pasteSettings() {
-        guard let c = clipboard else { status = "Nothing copied yet (⌘C)"; return }
+        guard let (c, parts) = clipboard else {
+            status = "No settings copied yet (Copy All Settings, or Develop / White Balance / LUT)"
+            notify(.copyPaste, status, icon: "exclamationmark.triangle")
+            return
+        }
         let ts = actionTargets()
-        edit(ts) { $0 = c }
-        status = "Pasted settings to \(ts.count) photo(s)"
+        guard !ts.isEmpty else { return }
+        edit(ts) { s in
+            if parts.contains(.develop) { s.ev = c.ev; s.contrast = c.contrast; s.hl = c.hl }
+            if parts.contains(.whiteBalance) { s.temp = c.temp; s.tint = c.tint }
+            if parts.contains(.look) { s.look = c.look }
+        }
+        status = "Pasted " + describe(parts, c) + " to \(ts.count) photo(s)"
         notify(.copyPaste, status, icon: "doc.on.clipboard")
         syncLookFromState()
         refreshAll()
     }
+
+    private func describe(_ parts: Set<CopyPart>, _ s: PhotoState) -> String {
+        var bits: [String] = []
+        if parts.contains(.develop) { bits.append(String(format: "develop %+.2f EV, contrast %+.1f", s.ev, s.contrast)) }
+        if parts.contains(.whiteBalance) { bits.append(s.temp.map { String(format: "WB %.0f K / %+.0f", $0, s.tint ?? 0) } ?? "WB as shot") }
+        if parts.contains(.look) { bits.append("LUT " + (s.look.flatMap(lookID(forKey:)).map { look($0).title } ?? "none")) }
+        return bits.joined(separator: " · ")
+    }
+
+    func perform(_ a: ShortcutAction) { copySettings(a.parts) }
 
     /// Gives the photos the white balance the photo on screen shows, as numbers. "As shot" is not copied as such:
     /// every photo's as-shot is its own, so copying it would just reset the others to their camera's WB.

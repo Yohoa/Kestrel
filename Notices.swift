@@ -34,7 +34,7 @@ enum NoticeKind: String, CaseIterable, Identifiable {
         case .undoRedo: "Undo and redo"
         case .autoExposure: "Auto exposure result"
         case .whiteBalance: "White balance changes (W, Auto WB, Copy WB)"
-        case .copyPaste: "Settings copied / pasted (⌘C / ⌘V)"
+        case .copyPaste: "Settings copied / pasted (⌥⌘C, ⌘V …)"
         case .lookStep: "Look switched with [ ] { }"
         case .filter: "Filter on / off (V)"
         case .overlay: "Clipping overlays on / off (O / U)"

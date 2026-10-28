@@ -246,7 +246,10 @@ struct PanelCommands: Commands {
             }
             Toggle("Highlight Recovery", isOn: Binding(get: { m.highlightRecovery }, set: { m.highlightRecovery = $0; m.developChanged() }))
             Divider()
-            Button("Copy Settings    ⌘C") { m.copySettings() }
+            Button("Copy Edited Photo    ⌘C") { m.copyImageToClipboard() }
+            ForEach(ShortcutAction.allCases) { a in
+                Button(a.menuTitle + (m.shortcuts.shortcut(a).map { "    " + $0.display } ?? "")) { m.perform(a) }
+            }
             Button("Paste Settings    ⌘V") { m.pasteSettings() }
             Button("Reset Image Rendering to Defaults") { m.resetAdjustments(); m.developChanged() }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
