@@ -190,7 +190,7 @@ extension ContentView {
                 }
                 if !groupHidden(c.kinds, ticked: !f.kinds.isEmpty, complete: true) {
                     filterGroup("File type", id: "kind") {
-                        ForEach(["ARW", "RAF", "DNG"], id: \.self) { k in
+                        ForEach(["ARW", "RAF", "CR2", "DNG"], id: \.self) { k in
                             if rowVisible(c.kinds[k], on: f.kinds.contains(k), complete: true) {
                                 filterRow(k, count: c.kinds[k], on: f.kinds.contains(k)) { m.filter.kinds = toggled(f.kinds, k) }
                             }

@@ -6,6 +6,10 @@ Newest first. Dates are when the change was made.
 
 - **Import your own LUTs**: choose a folder of `.cube` files again, with a way to set the input space (camera log) of a LUT whose name doesn't say it. Overrides kept outside the app (never inside it).
 
+## Unreleased (since 1.5.1)
+
+- **Canon CR2**: opened, shown, filtered (File type ▸ CR2), graded and exported like ARW / RAF / DNG; Kestrel is offered in Finder's Open With for .CR2.
+
 ## 1.5.1 — 2026-10-28
 
 - **Favorite folders**: the header star is filled when the folder on screen is a favourite, and a click removes it again.

@@ -34,7 +34,7 @@ struct WelcomeView: View {
                 Image(nsImage: NSApp.applicationIconImage).resizable().frame(width: 64, height: 64)
                 VStack(alignment: .leading, spacing: 3) {
                     Text("Welcome to Kestrel").font(.title2.bold())
-                    Text("A fast RAW viewer for culling and grading Sony ARW, Fujifilm RAF and DNG, with LUT looks and 10-bit HEIC export.")
+                    Text("A fast RAW viewer for culling and grading Sony ARW, Fujifilm RAF, Canon CR2 and DNG, with LUT looks and 10-bit HEIC export.")
                         .font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                 }
             }

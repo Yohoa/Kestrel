@@ -1156,7 +1156,7 @@ final class Model: ObservableObject {
         p.canChooseFiles = true
         p.canChooseDirectories = true
         p.allowsMultipleSelection = true
-        p.message = "Choose RAW files (ARW, RAF, DNG) or folders"
+        p.message = "Choose RAW files (ARW, RAF, CR2, DNG) or folders"
         guard p.runModal() == .OK else { return }
         load(p.urls)
     }
@@ -1316,7 +1316,7 @@ final class Model: ObservableObject {
 
     private func finishLoad(_ urls: [URL], _ scan: ScanResult, recursive rec: Bool, streaming: Bool = false) {
         if scan.photos.isEmpty && scan.sawNonRAWFile {                       // e.g. a JPG or .cube dropped on the picture
-            status = "Nothing to open: that is not a RAW file (ARW, RAF, DNG)."
+            status = "Nothing to open: that is not a RAW file (ARW, RAF, CR2, DNG)."
             notify(.export, status, icon: "exclamationmark.triangle")
             return
         }
@@ -1356,7 +1356,7 @@ final class Model: ObservableObject {
         restoreName = streaming && restore == nil ? lastName : nil
         if found.isEmpty {
             let what = urls.first?.lastPathComponent ?? "the selection"
-            emptyHint = rec ? "No ARW / RAF / DNG files in \(what)." : "No ARW / RAF / DNG files directly in \(what)."
+            emptyHint = rec ? "No ARW / RAF / CR2 / DNG files in \(what)." : "No ARW / RAF / CR2 / DNG files directly in \(what)."
             status = emptyHint ?? ""
             select(nil)
         } else {

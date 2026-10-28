@@ -2,7 +2,7 @@ import Foundation
 
 // MARK: - Photos
 
-let rawExtensions: Set<String> = ["arw", "raf", "dng"]
+let rawExtensions: Set<String> = ["arw", "raf", "cr2", "dng"]
 
 struct Photo: Identifiable, Equatable {
     let url: URL
@@ -203,7 +203,7 @@ struct FilterState: Equatable {
     var labels: Set<String> = []       // "None" = not set
     var dates: Set<DateBucket> = []
     var looks: Set<LookKind> = []
-    var kinds: Set<String> = []        // "ARW", "RAF", "DNG"
+    var kinds: Set<String> = []        // "ARW", "RAF", "CR2", "DNG"
     var selectedOnly = false
     var hideRejected = true
     var name = ""                      // substring or * mask on the file name, or on camera / lens; kept by V and Reset

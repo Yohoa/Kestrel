@@ -17,6 +17,7 @@
 			<array>
 				<string>com.sony.arw-raw-image</string>
 				<string>com.fuji.raw-image</string>
+				<string>com.canon.cr2-raw-image</string>
 				<string>com.adobe.raw-image</string>
 			</array>
 		</dict>

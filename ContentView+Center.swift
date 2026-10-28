@@ -22,7 +22,7 @@ extension ContentView {
             if let hint = m.emptyHint {
                 Text(hint).foregroundStyle(.secondary)
             } else {
-                Text("Open a folder of ARW / RAF / DNG files, pick one in Folders, or drop it here").foregroundStyle(.secondary)
+                Text("Open a folder of ARW / RAF / CR2 / DNG files, pick one in Folders, or drop it here").foregroundStyle(.secondary)
             }
             HStack(spacing: 12) {
                 Button { m.open() } label: { Label("Open…", systemImage: "folder").padding(.horizontal, 8) }
@@ -159,7 +159,7 @@ extension ContentView {
         } else {
             VStack(spacing: 8) {
                 Image(systemName: "photo.on.rectangle").font(.system(size: 40)).foregroundStyle(.secondary)
-                Text("Open a folder of ARW / RAF / DNG files, pick one in Folders, or drop it here").foregroundStyle(.secondary)
+                Text("Open a folder of ARW / RAF / CR2 / DNG files, pick one in Folders, or drop it here").foregroundStyle(.secondary)
             }
         }
     }
