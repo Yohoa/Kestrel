@@ -10,8 +10,10 @@ settings kept in standard `.xmp` sidecars that Lightroom and FastRawViewer read 
   prefetched. Grid and filmstrip views, smart zoom with a springy animation, trackpad pinch and pan.
 - **Looks**: Sony picture-profile-style looks, scene-linear S-Log / HLG output, and folders of `.cube` LUTs. The
   LUT panel has three modes: Preview (try a look on every photo), Apply (write it to the photo) and Per photo.
-  Each LUT's input space (S-Log3, V-Log, F-Log2…) is guessed from its name and can be set by hand; it is kept in
-  `kestrel-lut-inputs.json` in the LUT folder.
+  Each LUT's input space (S-Log3, V-Log, F-Log2…) is read from its file name (`…_VLog`, `…SLog3…`); Develop
+  then shows it read-only, so it can't be changed by accident. ⌥-click it, or use the LUT thumbnail's right-click
+  menu, to set it by hand; "Use File Name" goes back. Only settings that differ from the file name are kept, in
+  `kestrel-lut-inputs.json` in the LUT folder. A LUT whose name says nothing keeps a menu to choose its input.
 - **Develop**: exposure, white balance, contrast, highlight recovery, auto EV with several metering modes,
   histogram and clipping overlays.
 - **Culling**: star ratings, colour labels, reject, Move to `_Rejected` (⇧⌘⌫, undoable), Sort & Filter

@@ -1830,7 +1830,13 @@ final class Model: ObservableObject {
         if p.runModal() == .OK, let u = p.url { loadLUTFolder(u, remember: true) }
     }
 
-    struct LUTScan { var looks: [PPLook] = []; var urls: [Int: URL] = [:]; var skipped: [String] = [] }
+    /// Where a LUT's input space comes from: its file name ("…_VLog"), a setting made by hand, or neither (assumed).
+    enum LUTInputSource { case fileName, manual, assumed }
+
+    struct LUTScan {
+        var looks: [PPLook] = []; var urls: [Int: URL] = [:]; var skipped: [String] = []
+        var sources: [Int: LUTInputSource] = [:]
+    }
 
     /// Walks the folder and parses every .cube (about 1 s for 27 LUTs — never on the main thread).
     nonisolated static func scanLUTs(_ folder: URL, savedInputs: [String: String]) -> LUTScan {
@@ -1855,10 +1861,13 @@ final class Model: ObservableObject {
             do {
                 let lut = try CubeLUT.load(u)
                 if inFolder[rel(u)] == nil, let old = savedInputs[u.path] { inFolder[rel(u)] = old }    // move this Mac's setting over
-                let name = inFolder[rel(u)]
-                let input = Scenes.lutInputs.first { $0.name == name } ?? Scenes.guessInput(fromFileName: u.lastPathComponent) ?? Scenes.slog3SG3Cine
+                let guess = Scenes.guessInput(fromFileName: u.lastPathComponent)
+                if let g = guess, inFolder[rel(u)] == g.name { inFolder[rel(u)] = nil }   // says what the name says: not kept
+                let manual = inFolder[rel(u)].flatMap { n in Scenes.lutInputs.first { $0.name == n } }
+                let input = manual ?? guess ?? Scenes.slog3SG3Cine
                 let look = Looks.lutLook(index: r.looks.count, url: u, lut: lut, input: input, group: group(u))
                 r.looks.append(look); r.urls[look.id] = u
+                r.sources[look.id] = manual != nil ? .manual : guess != nil ? .fileName : .assumed
             } catch { r.skipped.append("\(u.lastPathComponent): \(error.localizedDescription)") }
         }
         if inFolder != before { writeLUTInputs(inFolder, to: folder) }
@@ -1888,6 +1897,7 @@ final class Model: ObservableObject {
         let added = before.map { b in scan.urls.values.filter { !b.contains($0.path) }.map { $0.deletingPathExtension().lastPathComponent }.sorted() } ?? []
         luts = scan.looks
         lutURLs = scan.urls
+        lutInputSources = scan.sources
         lutFolder = folder
         looksChanged()
         UserDefaults.standard.set(folder.path, forKey: Self.lutFolderKey)
@@ -1927,14 +1937,41 @@ final class Model: ObservableObject {
         return nil
     }
 
-    func setLUTInput(_ space: SceneSpace) {
-        guard let url = lutURLs[ppID], let f = lutFolder else { return }
-        notify(.lutInput, "\(url.deletingPathExtension().lastPathComponent) now expects \(space.name)", icon: "camera.filters")
-        var m = Self.readLUTInputs(f); m[relativePath(url)] = space.name
+    private(set) var lutInputSources: [Int: LUTInputSource] = [:]
+
+    /// A LUT look's input space, where it comes from, and what its file name alone would say.
+    func lutInput(_ id: Int) -> (space: SceneSpace, source: LUTInputSource, guess: SceneSpace?)? {
+        guard case .lut(_, let s) = look(id).kind, let url = lutURLs[id] else { return nil }
+        return (s, lutInputSources[id] ?? .assumed, Scenes.guessInput(fromFileName: url.lastPathComponent))
+    }
+
+    /// Sets the input space of LUT `id` (the current look by default) by hand. The same as the file name says is
+    /// not a setting: it is removed from kestrel-lut-inputs.json, which keeps only real overrides.
+    func setLUTInput(_ space: SceneSpace, for lookID: Int? = nil) {
+        let id = lookID ?? ppID
+        guard let url = lutURLs[id], let f = lutFolder else { return }
+        let guess = Scenes.guessInput(fromFileName: url.lastPathComponent)
+        let byName = guess?.name == space.name
+        notify(.lutInput, "\(url.deletingPathExtension().lastPathComponent) expects \(space.name)" + (byName ? " (from file name)" : " (manual)"),
+               icon: "camera.filters")
+        var m = Self.readLUTInputs(f); m[relativePath(url)] = byName ? nil : space.name
         var s = savedLUTInputs
         if Self.writeLUTInputs(m, to: f) { s[url.path] = nil }
+        else if byName { s[url.path] = nil }
         else { s[url.path] = space.name; status = "LUT folder is read-only: \(space.name) is kept on this Mac only" }
         savedLUTInputs = s
+        loadLUTFolder(f, remember: false)
+    }
+
+    /// Drops the hand-made input of LUT `id`: back to what its file name says (or the assumed default).
+    func useFileNameInput(for lookID: Int? = nil) {
+        let id = lookID ?? ppID
+        guard let url = lutURLs[id], let f = lutFolder else { return }
+        var m = Self.readLUTInputs(f); m[relativePath(url)] = nil
+        Self.writeLUTInputs(m, to: f)
+        var s = savedLUTInputs; s[url.path] = nil; savedLUTInputs = s
+        let g = Scenes.guessInput(fromFileName: url.lastPathComponent)
+        notify(.lutInput, "\(url.deletingPathExtension().lastPathComponent): input from the file name" + (g.map { " (\($0.name))" } ?? ""), icon: "camera.filters")
         loadLUTFolder(f, remember: false)
     }
 

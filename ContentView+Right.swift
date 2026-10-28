@@ -205,6 +205,24 @@ extension ContentView {
         .menuStyle(.borderlessButton).fixedSize()
     }
 
+    /// Right-click on a look thumbnail.
+    @ViewBuilder func lookMenu(_ look: PPLook) -> some View {
+        Button { m.applyLookToCurrent(look.id) } label: { Label("Save to This Photo", systemImage: "checkmark.circle") }
+            .disabled(m.current == nil)
+        Button { m.toggleFavoriteLook(look.id) } label: {
+            Label(m.isFavorite(look.id) ? "Remove from Favourites" : "Add to Favourites", systemImage: m.isFavorite(look.id) ? "star.slash" : "star")
+        }
+        if let info = m.lutInput(look.id) {
+            Divider()
+            Menu {
+                LUTInputChoices(m: m, lookID: look.id)
+            } label: {
+                Label("Input: \(info.space.name)" + (info.source == .manual ? " (manual)" : info.source == .fileName ? " (from file name)" : ""),
+                      systemImage: "camera.filters")
+            }
+        }
+    }
+
     func lookCell(_ look: PPLook) -> some View {
         VStack(spacing: 3) {
             ZStack(alignment: .topLeading) {
@@ -238,6 +256,7 @@ extension ContentView {
         .help(look.note + "\nDouble-click: save to this photo")
         .onTapGesture { m.chooseLook(look.id) }
         .simultaneousGesture(TapGesture(count: 2).onEnded { m.applyLookToCurrent(look.id) })
+        .contextMenu { lookMenu(look) }
     }
 
 }
