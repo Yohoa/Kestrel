@@ -2,9 +2,16 @@
 
 Newest first. Dates are when the change was made.
 
-## Unreleased (since 1.1)
+## 1.2 — 2026-10-28
 
-### 2026-10-28
+- **Copy and paste**
+  - ⌘C copies the edited photo (full size, with its look, exposure and white balance).
+  - Copy Develop, Copy White Balance, Copy LUT and Copy All Settings (⌥⌘C); ⌘V pastes only the parts that were copied, to the selection.
+  - Settings › Shortcuts: set a shortcut for each copy action.
+- **Grid**: a click selects at once (it used to wait for a possible double-click, ~0.3 s); marked photos show a clearer round badge.
+- **LUT thumbnail menu**: Apply to Selected Photos.
+- **Folders**: refresh button in the header.
+- **Windows**: no window tabs; File › New Window (⌘N) opens another, independent Kestrel.
 - **Touch and trackpad**
   - Swipe left / right on the photo to switch photos: two-finger swipe, Magic Mouse or three-finger swipe, and a quick sideways drag (Pencil or finger on a Sidecar iPad, or a mouse).
   - Drag a Develop value up / down to change it; drag the zoom indicator to zoom; two-finger scrolling over a value adjusts it.
