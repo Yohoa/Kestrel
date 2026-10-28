@@ -75,7 +75,8 @@ extension ContentView {
             Button { m.toggleGrid() } label: { Image(systemName: m.viewMode == .grid ? "photo" : "square.grid.2x2") }
                 .buttonStyle(.plain).help(m.viewMode == .grid ? "Single photo (G)" : "Grid view (G)")
             if m.viewMode == .grid { Slider(value: $m.gridCell, in: 120...360).frame(width: 90) }
-            Text("\(m.shownPhotos.count)/\(m.library.count)\(m.filter.isActive ? " filtered" : "")").font(.caption.monospacedDigit())
+            Text("\(m.shownPhotos.count)/\(m.library.count)\(m.filter.isActive ? " filtered" : "")\(m.rejectedHidden > 0 ? " · \(m.rejectedHidden) rejected hidden" : "")")
+                .font(.caption.monospacedDigit())
                 .foregroundStyle(m.filter.isActive ? Color.accentColor : .secondary)
             Text(m.status).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail).layoutPriority(-1)
             Spacer(minLength: 6)

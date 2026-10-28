@@ -425,7 +425,9 @@ final class SidecarWriter {
 /// Reading and (atomically) writing the sidecar next to a RAW file.
 enum XMPFile {
     static func url(for raw: URL) -> URL { raw.deletingPathExtension().appendingPathExtension("xmp") }
-    static func backupURL(for raw: URL) -> URL { raw.deletingPathExtension().appendingPathExtension("xmp.arwexport-backup") }
+    static func backupURL(for raw: URL) -> URL { raw.deletingPathExtension().appendingPathExtension("xmp.kestrel-backup") }
+    /// The name earlier versions used (the app was called ARWExport): still recognised, and moved along with the RAW.
+    static func oldBackupURL(for raw: URL) -> URL { raw.deletingPathExtension().appendingPathExtension("xmp.arwexport-backup") }
 
     static func read(_ raw: URL) -> (text: String, bom: Bool)? {
         guard let data = try? Data(contentsOf: url(for: raw)) else { return nil }
@@ -461,7 +463,8 @@ enum XMPFile {
         // One backup of a sidecar another program wrote (FastRawViewer, Lightroom, Capture One), taken the first time
         // this app edits it: if an edit ever damaged someone else's file, the original is still there. A sidecar
         // this app created or has already edited (it has arwexport: tags) needs none.
-        if let existing, !existing.text.contains("arwexport:"), !fm.fileExists(atPath: backupURL(for: raw).path) {
+        if let existing, !existing.text.contains("arwexport:"), !fm.fileExists(atPath: backupURL(for: raw).path),
+           !fm.fileExists(atPath: oldBackupURL(for: raw).path) {
             try? fm.copyItem(at: url(for: raw), to: backupURL(for: raw))
         }
         var data = Data()

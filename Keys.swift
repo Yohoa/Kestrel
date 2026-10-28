@@ -9,31 +9,32 @@ import SwiftUI
 
 enum Shortcuts {
     static let groups: [(title: String, items: [(keys: String, text: String)])] = [
-        ("Navigate (FastRawViewer)", [
+        ("Navigate", [
             ("← →  Space  ⇧Space", "Previous / next photo (follows the filter)"),
+            ("Swipe, flick", "Two fingers sideways, or a quick sideways drag, on the photo: previous / next"),
             ("Home  End", "First / last photo"),
             ("↑ ↓", "One row up / down in the grid"),
             ("G", "Image grid ↔ single image"),
             ("Return, double-click", "Open the photo in single view (grid)"),
-            ("⌘N", "New window: another Kestrel, independent of this one"),
             ("⌘O  ⌘⇧O  ⌥O", "Open files / folder / folder with subfolders"),
             ("⌘⇧F4", "Reload the current folder"),
             ("⌘F", "Reveal in Finder"),
-            ("⇧⌘⌫", "Move to _Rejected (next to the RAW, with its .xmp; ⌘Z moves it back)"),
+            ("⇧⌘⌫", "Move to _Rejected (next to the RAW, with its .xmp; ⌘Z moves it back until you open another folder)"),
         ]),
-        ("Star marking & labels (XMP Metadata)", [
-            ("⌥1 – ⌥5   (or 1 – 5)", "Star rating"),
-            ("⌥0   (or 0)", "No rating"),
-            ("X", "Reject / un-reject (rating −1)"),
-            ("⌥6 – ⌥9   (or 6 – 9)", "Label Red / Yellow / Green / Blue; again to clear"),
+        ("Rate, label, select", [
+            ("1 – 5   (or ⌥1 – ⌥5)", "Star rating"),
+            ("0   (or ⌥0)", "No rating"),
+            ("X", "Reject / un-reject. Rejected photos are hidden while the filter is on (V shows them)"),
+            ("6 – 9   (or ⌥6 – ⌥9)", "Label Red / Yellow / Green / Blue; again to clear"),
             ("Click  ⌘-click  ⇧-click  ⌘⇧-click", "Select this photo / add or remove one / a range / add a range"),
             ("⇧←  ⇧→   (⇧↑ ⇧↓ in the grid)", "Extend the selection"),
-            ("⌘A  ⌘I  ⌘D  Esc", "Select every shown photo / invert / (de)select this one and go to the next / clear"),
-            ("Selection", "Ratings, labels, X, ⌘V, Apply to…, Copy WB to…, Auto EV ▸ Selection and Export act on the selected photos (red Sel = the photo on screen is one of them); sliders and develop keys act on the photo on screen"),
+            ("⌘A  ⌘I  ⌘D", "Select every shown photo / invert / (de)select this one and go to the next"),
+            ("What acts on what", "Ratings, labels and X: the photo on screen in single view, the selected photos in the grid. ⌘V, Apply to…, Copy WB to…, Auto EV ▸ Selection and Export: the selected photos anywhere. Sliders and develop keys: the photo on screen"),
         ]),
-        ("Adjust (FastRawViewer)", [
+        ("Adjust", [
             ("⌥+  ⌥−", "Exposure up / down (small step; Settings)"),
             ("⌥⌘+  ⌥⌘−", "Exposure up / down (big step)"),
+            ("Drag a value", "Up / down on a Develop or White Balance number (⌥ finer, ⇧ faster); double-click resets it"),
             ("⇧A", "Auto exposure correction"),
             ("A", "Exposure to 0; A again restores it"),
             ("K  ⇧K", "Contrast up / down by ½ grade (−5…+5; the Develop slider goes in 0.1)"),
@@ -43,6 +44,7 @@ enum Shortcuts {
             ("⌥⌘C  ⌘V", "Copy all settings / paste the copied settings (only the parts copied; to the selection). Copy Develop, White Balance and LUT on their own: Settings ▸ Shortcuts"),
         ]),
         ("Looks / LUTs", [
+            ("Click, double-click", "A click shows a look (in Preview mode nothing is saved); a double-click saves it to the photo on screen"),
             ("[  ]", "Previous / next look (LUT panel order)"),
             ("{  }   (⇧[  ⇧])", "Previous / next favourite look"),
             ("⌃1 – ⌃9", "Favourite look 1 – 9"),
@@ -50,15 +52,35 @@ enum Shortcuts {
             ("\\", "Before / after: flip between the look and Base"),
             ("L", "Add / remove the current look from the favourites"),
         ]),
-        ("View (FastRawViewer)", [
+        ("View", [
             ("Z, double-click", "Smart zoom: fit ↔ the smallest of 25/33/50/67/100 % that is ≥ 2 × the fit size (Settings); double-click zooms on that spot"),
             ("⌘1  ⌘0  ⌘+  ⌘−", "100 % / fit to window / next / previous zoom step"),
+            ("Pinch, ⌥/⌘ + scroll", "Zoom at the pointer; or drag the Fit / % label in the status bar sideways"),
             ("O  U", "Over-exposure (red) / under-exposure (blue) display"),
             ("F", "Full screen"),
-            ("Tab", "Hide all panels; Tab again shows them"),
+            ("Tab", "Hide all panels (point at the left / right edge to peek); Tab again shows them"),
             ("V", "Filter on / off"),
-            ("F2 – F10, ⇧F7, ⇧F8", "Show / hide panels (⇧F8 = Sort & Filter)"),
+            ("F2 – F10, ⇧F7, ⇧F8", "Show / hide panels (⇧F8 = Sort & Filter); a panel closed with × stays closed until shown here or in the Panels menu"),
+            ("⌥⌘[  ⌥⌘]", "Fold / unfold the left / right sidebar"),
+            ("⇧⌘L", "Dark ↔ light"),
+        ]),
+        ("Esc", [
+            ("Esc", "In this order: cancels picking a neutral grey, clears the selection, zooms back to fit, closes a sheet"),
+        ]),
+        ("Export, windows, help", [
+            ("⌘E", "Export As…: this photo, to a place you choose"),
+            ("⇧⌘E", "Export the shown or selected photos, each with its own look (Export settings: ⚙︎ in the status bar)"),
+            ("Right-click ▸ Quick Export", "This photo, no dialog, into the Export settings' folder (a HEIC folder next to the RAW by default)"),
+            ("⌘Z  ⇧⌘Z", "Undo / redo (ratings, labels, develop, looks, moves); the history starts again with each folder"),
+            ("⌘N", "Another Kestrel window, a separate app of its own; both share the settings, and the one that quits last keeps its own"),
+            ("⌘,", "Settings"),
             ("F1  ⌘K  ?", "This help"),
+        ]),
+        ("Files Kestrel writes", [
+            ("photo.xmp", "Ratings, labels and Kestrel's settings, next to each RAW (Lightroom and FastRawViewer read it too)"),
+            ("photo.xmp.kestrel-backup", "A one-time copy of a sidecar another program wrote, before Kestrel first changed it"),
+            ("_Rejected/", "Photos moved there with ⇧⌘⌫"),
+            ("HEIC/", "Exports, by default"),
         ]),
     ]
 }

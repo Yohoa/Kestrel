@@ -9,6 +9,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         NSWindow.allowsAutomaticWindowTabbing = false      // no window tabs (and no Show Tab Bar / Show All Tabs)
     }
 
+    /// RAWs or a folder opened from Finder (Open With, double-click) or dropped on the Dock icon. At a cold launch
+    /// they can come before the model exists: kept until it does.
+    @MainActor static var pendingOpen: [URL] = []
+    func application(_ application: NSApplication, open urls: [URL]) {
+        MainActor.assumeIsolated {
+            if let m = AppDelegate.model { m.load(urls) } else { AppDelegate.pendingOpen = urls }
+        }
+    }
+
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         MainActor.assumeIsolated { AppDelegate.model?.flushForQuit() }       // pending develop saves are written first
         return .terminateNow
@@ -21,7 +30,9 @@ struct KestrelApp: App {
     @StateObject private var model = Model()
 
     var body: some Scene {
-        WindowGroup("Kestrel") { ContentView(m: model) }
+        // One main window (a Window scene, not a WindowGroup): files opened from Finder go to it instead of opening a
+        // second window on the same model. Another window is another Kestrel (File ▸ New Window).
+        Window("Kestrel", id: "main") { ContentView(m: model) }
             .defaultSize(width: 1500, height: 940)
             .commands { PanelCommands(m: model); UndoCommands(store: model.undo) }
         Settings { SettingsView(m: model) }
@@ -482,6 +493,10 @@ final class Model: ObservableObject {
         }
         AppDelegate.model = self
         layoutStore.model = self
+        if !AppDelegate.pendingOpen.isEmpty {                   // opened from Finder: that, not the last folder
+            let urls = AppDelegate.pendingOpen; AppDelegate.pendingOpen = []
+            DispatchQueue.main.async { [weak self] in self?.load(urls) }
+        }
         // Menus follow folding and presets; widths are observed by the columns alone (no whole-window redraw per drag pixel).
         layoutSink = Publishers.Merge3(layoutStore.$leftCollapsed.map { _ in () }, layoutStore.$rightCollapsed.map { _ in () },
                                        layoutStore.$presetNames.map { _ in () })
@@ -546,6 +561,8 @@ final class Model: ObservableObject {
         if shown(p) {
             panelWindows[p.rawValue]?.close()                 // a torn-off panel closes its window first
             hiddenPanels.insert(p.rawValue)
+            // it stays closed, next launch too: say how to get it back
+            notify(.panelHidden, "\(p.title) closed · Panels menu or F\(p.fKey)\(p.needsShift ? " with ⇧" : "") shows it", icon: "rectangle.slash")
         } else { hiddenPanels.remove(p.rawValue) }
     }
 
@@ -1530,13 +1547,14 @@ final class Model: ObservableObject {
         undo.record(value < 0 ? "Reject" : "Rating",
                     undo: { [weak self] in old.forEach { v, us in self?.applyRating(v, to: us) } },
                     redo: { [weak self] in self?.applyRating(value, to: ts) })
-        applyRating(value, to: ts)
-        let what = value < 0 ? "Rejected" : value == 0 ? "Rating cleared" : String(repeating: "★", count: value)
-        notify(.rating, what + (ts.count > 1 ? " · \(ts.count) photos" : ""), icon: value < 0 ? "xmark.circle" : "star")
+        var what = value < 0 ? "Rejected" : value == 0 ? "Rating cleared" : String(repeating: "★", count: value)
+        if ts.count > 1 { what += " · \(ts.count) photos" }
+        if value < 0, filter.enabled, filter.hideRejected { what += " · hidden (V shows all)" }   // why it just vanished
+        applyRating(value, to: ts, notice: (.rating, what, value < 0 ? "xmark.circle" : "star"))
     }
 
-    private func applyRating(_ value: Int, to ts: [URL]) {
-        writeMeta(ts, [XMPChange(tag: "xmp:Rating", value: String(value))]) { $0.rating = value }
+    private func applyRating(_ value: Int, to ts: [URL], notice: (kind: NoticeKind, text: String, icon: String)? = nil) {
+        writeMeta(ts, [XMPChange(tag: "xmp:Rating", value: String(value))], notice: notice) { $0.rating = value }
     }
 
     func setLabel(_ name: String?, on urls: [URL]? = nil) {
@@ -1549,12 +1567,11 @@ final class Model: ObservableObject {
         undo.record("Label",
                     undo: { [weak self] in old.forEach { v, us in self?.applyLabel(v.isEmpty ? nil : v, to: us) } },
                     redo: { [weak self] in self?.applyLabel(value, to: ts) })
-        applyLabel(value, to: ts)
-        notify(.label, (value.map { "\($0) label" } ?? "Label cleared") + (ts.count > 1 ? " · \(ts.count) photos" : ""), icon: "tag")
+        applyLabel(value, to: ts, notice: (.label, (value.map { "\($0) label" } ?? "Label cleared") + (ts.count > 1 ? " · \(ts.count) photos" : ""), "tag"))
     }
 
-    private func applyLabel(_ value: String?, to ts: [URL]) {
-        writeMeta(ts, [XMPChange(tag: "xmp:Label", value: value)]) { $0.label = value }
+    private func applyLabel(_ value: String?, to ts: [URL], notice: (kind: NoticeKind, text: String, icon: String)? = nil) {
+        writeMeta(ts, [XMPChange(tag: "xmp:Label", value: value)], notice: notice) { $0.label = value }
     }
 
     func revealInFinder(_ url: URL) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
@@ -1597,7 +1614,7 @@ final class Model: ObservableObject {
                 try fm.moveItem(at: u, to: dest)
                 r.raws.append(u); r.files.append((u, dest))
                 // a.ARW + a.DNG share a.xmp: it goes with the first one
-                for c in [XMPFile.url(for: u), XMPFile.backupURL(for: u)] where fm.fileExists(atPath: c.path) {
+                for c in [XMPFile.url(for: u), XMPFile.backupURL(for: u), XMPFile.oldBackupURL(for: u)] where fm.fileExists(atPath: c.path) {
                     let cd = d.appendingPathComponent(c.lastPathComponent)
                     if !fm.fileExists(atPath: cd.path), (try? fm.moveItem(at: c, to: cd)) != nil { r.files.append((c, cd)) }
                 }
@@ -1613,7 +1630,7 @@ final class Model: ObservableObject {
         removeFromLibrary(gone)
         status = r.failed.isEmpty ? "Moved \(r.raws.count) photo(s) to \(Self.rejectedFolderName)"
             : "Moved \(r.raws.count) to \(Self.rejectedFolderName); not moved: " + r.failed.joined(separator: "; ")
-        notify(.moveRejected, r.failed.isEmpty ? "Moved \(r.raws.count) photo(s) to \(Self.rejectedFolderName) · ⌘Z moves back" : status,
+        notify(.moveRejected, r.failed.isEmpty ? "Moved \(r.raws.count) photo(s) to \(Self.rejectedFolderName) · ⌘Z moves back (until you open another folder)" : status,
                icon: r.failed.isEmpty ? "archivebox" : "exclamationmark.triangle")
         guard recordUndo, !r.raws.isEmpty else { return }
         let files = r.files, raws = r.raws
@@ -1717,7 +1734,9 @@ final class Model: ObservableObject {
 
     /// Writes rating / label / panel edits. Each call gets a sequence number, so a result that arrives late
     /// can never overwrite what a newer call already put on screen.
-    private func writeMeta(_ urls: [URL], _ changes: [XMPChange], update: @escaping (inout Photo) -> Void, then: (() -> Void)? = nil) {
+    /// `notice` is shown once the sidecars are written; a failed write shows a warning instead (not only the status line).
+    private func writeMeta(_ urls: [URL], _ changes: [XMPChange], notice: (kind: NoticeKind, text: String, icon: String)? = nil,
+                           update: @escaping (inout Photo) -> Void, then: (() -> Void)? = nil) {
         metaSeq += 1
         let seq = metaSeq
         let after = then
@@ -1740,8 +1759,13 @@ final class Model: ObservableObject {
                 }
                 self.recomputeView()
                 if let c = self.current, ok.contains(c) { self.loadXMPPanel() }
-                if let e = errors.first { self.status = "XMP write failed — \(e)" + (errors.count > 1 ? " (+\(errors.count - 1) more)" : "") }
-                else { self.status = "Updated \(ok.count) sidecar(s)" }
+                if let e = errors.first {
+                    self.status = "XMP write failed — \(e)" + (errors.count > 1 ? " (+\(errors.count - 1) more)" : "")
+                    self.notify(notice?.kind ?? .rating, "Not saved: " + e + (errors.count > 1 ? " (+\(errors.count - 1) more)" : ""), icon: "exclamationmark.triangle")
+                } else {
+                    self.status = "Updated \(ok.count) sidecar(s)"
+                    if let n = notice { self.notify(n.kind, n.text, icon: n.icon) }
+                }
                 after?()
             }
         })
@@ -2592,7 +2616,7 @@ final class Model: ObservableObject {
             }
             let single = scope.count == 1 ? lastEV : nil
             await MainActor.run {
-                self?.status = "Auto EV (\(mode.rawValue)) set for \(done) photo(s)."
+                self?.status = "Auto EV (\(mode.title)) set for \(done) photo(s)."
                     + (circles > 0 ? " Lens corners ignored on \(circles)." : "")
                 let what = single.map { String(format: "Auto exposure %+.1f EV", $0) } ?? "Auto exposure set for \(done) photo(s)"
                 self?.notify(.autoExposure, what + " · \(mode.title)" + (circles > 0 ? " · lens corners ignored" : ""), icon: "plusminus.circle")
@@ -2613,6 +2637,12 @@ final class Model: ObservableObject {
     }
 
     var exportScopeText: String { selection.isEmpty ? "shown" : "selected" }
+
+    /// Rejected photos the filter is hiding right now (shown next to the count, so a rejected photo vanishing is explained).
+    var rejectedHidden: Int {
+        guard filter.enabled, filter.hideRejected else { return 0 }
+        return library.filter(\.isRejected).count - shownPhotos.filter(\.isRejected).count
+    }
 
     func cancelExport() { exportTask?.cancel() }
 

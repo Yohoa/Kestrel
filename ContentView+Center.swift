@@ -217,7 +217,7 @@ extension ContentView {
             Button("Selection (\(m.selection.count))") { m.autoExposure(scope: m.actionTargets()) }.disabled(!m.hasGroup)
             Button("Every shown photo") { m.autoExposure(scope: m.files) }
             Divider()
-            Menu("Metering: \(m.meteringMode.rawValue)") {
+            Menu("Metering: \(m.meteringMode.title)") {
                 ForEach(MeteringMode.allCases) { mode in
                     Button { m.meteringMode = mode } label: { Text((m.meteringMode == mode ? "✓ " : "    ") + mode.title) }
                 }

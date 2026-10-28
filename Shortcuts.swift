@@ -145,10 +145,29 @@ struct ShortcutRecorder: NSViewRepresentable {
             let key = (e.charactersIgnoringModifiers ?? "").lowercased()
             guard !key.isEmpty else { return true }
             let s = Shortcut(keyCode: e.keyCode, key: key, modifiers: e.modifierFlags.intersection([.command, .shift, .option, .control]).rawValue)
-            if let why = s.reservedReason { hint = why; needsDisplay = true; NSSound.beep(); return true }
+            if let why = s.reservedReason ?? Self.menuItemUsing(s).map({ "used by “\($0)”" }) {
+                hint = why; needsDisplay = true; NSSound.beep(); return true
+            }
             onChange(s)
             recording = false
             return true
+        }
+
+        /// A menu item that already has this key equivalent (⌘O, ⌘E …): taking it would silently steal that command.
+        static func menuItemUsing(_ s: Shortcut) -> String? {
+            func search(_ menu: NSMenu?) -> String? {
+                for item in menu?.items ?? [] {
+                    if !item.keyEquivalent.isEmpty {
+                        let k = item.keyEquivalent
+                        var mods = item.keyEquivalentModifierMask.intersection([.command, .shift, .option, .control])
+                        if k != k.lowercased() { mods.insert(.shift) }          // "E" means ⇧E
+                        if k.lowercased() == s.key, mods == s.flags { return item.title }
+                    }
+                    if let found = search(item.submenu) { return found }
+                }
+                return nil
+            }
+            return search(NSApp.mainMenu)
         }
 
         override func draw(_ dirtyRect: NSRect) {

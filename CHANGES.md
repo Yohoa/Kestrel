@@ -2,6 +2,19 @@
 
 Newest first. Dates are when the change was made.
 
+## Unreleased (since 1.3)
+
+- **Welcome** screen on the first launch and a **tip** at later launches (Close / Don't Show Again; Help menu).
+- **Fewer surprises** (from a review of what could confuse a new user):
+  - Trying looks no longer saves them: the LUT panel starts in Preview, and the default look is Base. Sony's picture profiles are called "Sony PP1 Movie" … "Sony PP10 HLG".
+  - Batch export uses each photo's own look by default (or the ticked looks, in Export settings); export settings are kept across launches; the buttons are called Export As… and Quick Export, and say why when there is nothing to export.
+  - Rating and label notices appear once the .xmp is written, and a failed write says so; rejecting a photo that the filter then hides says how to see it, and the count shows "N rejected hidden".
+  - Closing a panel says how to get it back; panel names match the Panels menu.
+  - Help (F1 / ⌘K) lists the menu shortcuts too, what acts on the photo or the selection, Esc, ⌘N and the files Kestrel writes.
+  - RAWs and folders open from Finder (Open With, the Dock icon) into the one window.
+  - A recorded shortcut that a menu already uses is refused.
+  - Setting a LUT's input space by hand is hidden for now; the sidecar backup is now `.xmp.kestrel-backup`.
+
 ## 1.3 — 2026-10-28
 
 - **Built-in LUTs**: the 27 V-Log Alchemy LUTs (Apache-2.0, licence included) come with the app, used when no LUT folder of your own is set; LUT panel gear › Built-in LUTs switches back to them. Same layout as a LUT folder, so looks saved in `.xmp` files are found in either.

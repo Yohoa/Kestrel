@@ -49,15 +49,15 @@ enum Panel: String, CaseIterable, Identifiable {
         switch self {
         case .histogram: "Histogram"
         case .exif: "EXIF"
-        case .stats: "Over/Underexposure Stats"
+        case .stats: "Exposure Stats"
         case .xmp: "XMP Metadata"
         case .filmstrip: "Filmstrip"
         case .folders: "Folders"
-        case .favorites: "Favorite Folders"
+        case .favorites: "Favorite folders"
         case .filter: "Sort & Filter"
         case .looks: "LUT"
         case .whiteBalance: "White Balance"
-        case .develop: "Develop (Exposure / Temp / Tint)"
+        case .develop: "Develop"
         }
     }
     /// Function key, following FastRawViewer: F2 histogram … F5 XMP, F6 filmstrip, F7 folders, F8 the slot of Sort & Filter.

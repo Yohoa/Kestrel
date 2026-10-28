@@ -101,16 +101,16 @@ struct SettingsView: View {
                     .onChange(of: m.includeSubfolders) { _, _ in m.includeSubfoldersChanged() }
             }
             Section("Looks") {
-                Picker("LUT panel columns", selection: $m.lutColumns) {
-                    Text("2").tag(2)
-                    Text("3").tag(3)
+                Picker("LUT thumbnails", selection: $m.lutColumns) {
+                    Text("Large").tag(2)
+                    Text("Small").tag(3)
                 }
                 .pickerStyle(.segmented)
                 Toggle("Show favourite looks only", isOn: $m.favoriteLooksOnly)
                 Text("\(m.favoriteLooks.count) favourite look(s). Click the star on a look, or press L.").font(.caption).foregroundStyle(.secondary)
             }
             Section("Selection") {
-                Toggle("Advanced selection mode: single click does not ruin selection", isOn: $m.advancedSelection)
+                Toggle("Keep the selection when clicking a photo (advanced selection)", isOn: $m.advancedSelection)
                 Text(m.advancedSelection
                      ? "Click moves to a photo and keeps the selection. ⌘-click or the checkbox in a thumbnail's corner marks it."
                      : "Standard (Finder): click selects only that photo, ⌘-click adds or removes, ⇧-click selects a range.")
