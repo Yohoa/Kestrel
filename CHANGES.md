@@ -6,7 +6,7 @@ Newest first. Dates are when the change was made.
 
 - **Import your own LUTs**: choose a folder of `.cube` files again, with a way to set the input space (camera log) of a LUT whose name doesn't say it. Overrides kept outside the app (never inside it).
 
-## Unreleased (since 1.4)
+## 1.5 — 2026-10-28
 
 - **Grid**: clicking a photo no longer centres it (so a double-click's second click no longer lands on another photo): a photo in full view stays put, one cut off at the top or bottom edge scrolls just enough to show it whole; moving with the keys does the same.
 - **Filmstrip**: a click works the same way (no jump to the centre; a cell cut off at the edge scrolls just enough); keys and swipes still keep the current photo centred.
