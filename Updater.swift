@@ -214,7 +214,11 @@ final class Updater: ObservableObject {
         p.executableURL = URL(fileURLWithPath: "/bin/sh")
         p.arguments = [script.path]
         try? p.run()                                         // keeps running after this app quits
-        NSApp.terminate(nil)                                 // pending sidecar saves are written first
+        AppDelegate.model?.flushForQuit()                    // pending sidecar saves are written first
+        NSLog("Kestrel update: quitting to install")
+        NSApp.terminate(nil)
+        // a sheet or a background launch can leave terminate unanswered; the swap waits for this process to end
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2) { exit(0) }
     }
 }
 
