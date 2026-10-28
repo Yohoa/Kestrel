@@ -55,6 +55,15 @@ extension Model {
     /// Tab: hide every panel; Tab again brings back exactly what was shown.
     func toggleHideAllPanels() {
         layoutStore.peekLeft = false; layoutStore.peekRight = false
+        // Every panel already closed by hand: there is nothing for Tab to hide, and doing nothing looks broken.
+        // Bring the default view back instead (every panel, in the current arrangement, both sides unfolded).
+        if panelsBeforeHideAll == nil, !Panel.allCases.contains(where: { $0 != .filmstrip && shown($0) && !isDetached($0) }) {
+            hiddenPanels = []
+            layoutStore.setCollapsed(left: true, false)
+            layoutStore.setCollapsed(left: false, false)
+            status = "No panels were shown: all panels back (Tab hides them)"
+            return
+        }
         if let saved = panelsBeforeHideAll {
             hiddenPanels = saved
             panelsBeforeHideAll = nil

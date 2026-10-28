@@ -30,6 +30,8 @@ final class LayoutStore: ObservableObject {
     @Published private(set) var fullScreen = false
     private var fullScreenObservers: [NSObjectProtocol] = []
     var stripWidth: Double { fullScreen ? 12 : 22 }
+    /// A side with every panel hidden (Tab): an empty drop zone, the same on both sides, slimmer in full screen too.
+    var emptyWidth: Double { fullScreen ? 6 : 14 }
 
     init() {
         for (name, on) in [(NSWindow.didEnterFullScreenNotification, true), (NSWindow.didExitFullScreenNotification, false)] {
@@ -83,7 +85,7 @@ final class LayoutStore: ObservableObject {
         let windowWidth = Double(model?.mainWindow?.frame.width ?? 1500)
         let otherVisible = (left ? model?.rightVisible : model?.leftVisible) ?? true
         let otherCollapsed = left ? rightCollapsed : leftCollapsed
-        let other = otherCollapsed ? stripWidth : (otherVisible ? (left ? rightWidth : leftWidth) + 8 : 14)
+        let other = otherCollapsed ? stripWidth : (otherVisible ? (left ? rightWidth : leftWidth) + 8 : emptyWidth)
         let chrome: Double = 8 + 6 + 12                 // this splitter, picture padding, window padding
         let limit = max(Self.minWidth, min(Self.maxWidth, windowWidth - other - chrome - Self.minPicture))
         let c = min(max(w, Self.minWidth), limit)

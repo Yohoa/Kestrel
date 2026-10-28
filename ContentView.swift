@@ -17,8 +17,8 @@ struct ContentView: View {
         VStack(spacing: 4) {
             Observing(m.layoutStore) { layout in HStack(spacing: 0) {
                 // Side columns: drag the handle to resize, click it (or ⌥⌘[ / ⌥⌘]) to fold.
-                // a side with nothing to show (all hidden, Tab) keeps the same 14 pt drop zone, folded or not,
-                // so both edges of the picture get the same margin
+                // a side with nothing to show (all hidden, Tab) keeps the same drop zone, folded or not, so both
+                // edges of the picture get the same margin; it is slimmer in full screen, like the folded strips
                 if layout.leftCollapsed { if m.leftVisible { FoldedSidebar(store: layout, left: true) } else { column("left", width: 0) } }
                 else {
                     column("left", width: layout.leftWidth)
@@ -194,7 +194,7 @@ struct ContentView: View {
         let visible = panels ?? m.panels(in: side).filter { m.shown($0) && !m.isDetached($0) }
         if visible.isEmpty {
             // keeps an empty column droppable
-            Color.clear.frame(width: 14)
+            Color.clear.frame(width: m.layoutStore.emptyWidth)
                 .dropDestination(for: String.self) { items, _ in
                     guard let r = items.first else { return false }
                     m.movePanel(r, to: side, before: nil); return true

@@ -133,23 +133,12 @@ extension ContentView {
         .fixedSize().controlSize(.small).disabled(m.current == nil)
     }
 
-    func copyWB(to urls: [URL]) {
-        if let c = m.current { m.ensureRead([c]) }
-        let t = m.currentState.temp, ti = m.currentState.tint
-        m.edit(urls) { $0.temp = t; $0.tint = ti }
-        m.status = "Copied white balance to \(urls.count) photo(s)"
-    }
+    func copyWB(to urls: [URL]) { m.copyWhiteBalance(to: urls) }
 
     // MARK: LUT panel (takes the slot FastRawViewer gives Sort & Filter)
 
     var lutPanel: some View {
-        PanelBox("LUT", panel: .looks, onClose: { m.toggle(.looks) }, trailing: { lutMenu }) {
-            Picker("", selection: $m.lookMode) {
-                ForEach(LookMode.allCases) { Text($0.title).tag($0) }
-            }
-            .pickerStyle(.segmented).labelsHidden().controlSize(.small)
-            .padding(.horizontal, 8).padding(.top, 4)
-            .help(m.lookMode.help)
+        PanelBox("LUT", panel: .looks, onClose: { m.toggle(.looks) }, trailing: { HStack(spacing: 6) { lookModeSwitch; lutMenu } }) {
             ScrollView {
                 // Adapts to the column width: as many cells per row as fit (thumbnail size from the gear menu)
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: m.lutColumns == 2 ? 160 : 104), spacing: 6)], spacing: 8) {
@@ -159,6 +148,17 @@ extension ContentView {
                 Text(lutFooter).font(.caption2).foregroundStyle(.secondary).padding(.bottom, 6)
             }
             .onDrop(of: [.fileURL], isTargeted: nil) { providers in dropFiles(providers, intoLUTs: true) }
+            .overlay(alignment: .top) {
+                if let n = m.lutNotice {
+                    Label(n, systemImage: "checkmark.circle.fill")
+                        .font(.system(size: 11, weight: .medium)).lineLimit(1).truncationMode(.middle)
+                        .padding(.horizontal, 10).padding(.vertical, 5)
+                        .glassCapsule()
+                        .padding(.top, 6).padding(.horizontal, 8)
+                        .transition(.opacity.combined(with: .move(edge: .top)))
+                        .allowsHitTesting(false)
+                }
+            }
         }
     }
 
@@ -167,6 +167,26 @@ extension ContentView {
         if let f = m.lutFolder { s += " · \(m.luts.count) LUT(s) from \(f.lastPathComponent)" }
         else { s += " · drop a folder of .cube LUTs here" }
         return s
+    }
+
+    /// Preview / Apply / Per photo, in the header next to the gear: tiny compressed capitals, so it costs no row.
+    var lookModeSwitch: some View {
+        HStack(spacing: 1) {
+            ForEach(LookMode.allCases) { mode in
+                let on = m.lookMode == mode
+                Text(mode.title.uppercased())
+                    .font(.system(size: 9, weight: .bold)).fontWidth(.compressed).tracking(0.6)
+                    .foregroundStyle(on ? Color.white : Color.secondary)
+                    .padding(.horizontal, 5).padding(.vertical, 2)
+                    .background(RoundedRectangle(cornerRadius: 3).fill(on ? Color.accentColor : .clear))
+                    .contentShape(Rectangle())
+                    .onTapGesture { m.lookMode = mode }
+                    .help(mode.help)
+            }
+        }
+        .padding(1)
+        .background(RoundedRectangle(cornerRadius: 4).fill(Color.primary.opacity(0.08)))
+        .fixedSize()
     }
 
     var lutMenu: some View {
@@ -221,8 +241,9 @@ extension ContentView {
             Text(look.title).font(.caption2).lineLimit(2).multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, minHeight: 26, alignment: .top)
         }
-        .help(look.note)
+        .help(look.note + "\nDouble-click: save to this photo")
         .onTapGesture { m.chooseLook(look.id) }
+        .simultaneousGesture(TapGesture(count: 2).onEnded { m.applyLookToCurrent(look.id) })
     }
 
 }

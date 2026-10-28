@@ -458,7 +458,10 @@ enum XMPFile {
         let introduced = after.filter { !before.contains($0) }
         if !introduced.isEmpty { throw WriteError(message: "Refused: the edit would break XMP conformance — " + introduced.joined(separator: "; ")) }
         let fm = FileManager.default
-        if existing != nil, !fm.fileExists(atPath: backupURL(for: raw).path) {
+        // One backup of a sidecar another program wrote (FastRawViewer, Lightroom, Capture One), taken the first time
+        // this app edits it: if an edit ever damaged someone else's file, the original is still there. A sidecar
+        // this app created or has already edited (it has arwexport: tags) needs none.
+        if let existing, !existing.text.contains("arwexport:"), !fm.fileExists(atPath: backupURL(for: raw).path) {
             try? fm.copyItem(at: url(for: raw), to: backupURL(for: raw))
         }
         var data = Data()

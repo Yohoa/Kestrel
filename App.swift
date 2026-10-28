@@ -781,6 +781,20 @@ final class Model: ObservableObject {
         refreshAll()
     }
 
+    /// Gives the photos the white balance the photo on screen shows, as numbers. "As shot" is not copied as such:
+    /// every photo's as-shot is its own, so copying it would just reset the others to their camera's WB.
+    func copyWhiteBalance(to urls: [URL]) {
+        guard let c = current else { return }
+        ensureRead([c])
+        let st = currentState
+        guard let t = st.temp ?? asShot?.temp else { status = "White balance not read yet, try again in a moment"; return }
+        let ti = st.tint ?? asShot?.tint ?? 0
+        let targets = urls.filter { $0 != c }
+        guard !targets.isEmpty else { status = "Nothing to copy to: only this photo is selected"; return }
+        edit(targets) { $0.temp = t; $0.tint = ti }
+        status = String(format: "Copied %.0f K / %+.0f to %d photo(s)", t, ti, targets.count)
+    }
+
     func applyCurrentSettings(to scope: [URL]) {
         if let u = current { ensureRead([u]) }
         let c = currentState
@@ -907,6 +921,26 @@ final class Model: ObservableObject {
         refreshPreview()
         if zoomed { refreshZoom(force: true) }
     }
+
+    /// Double-click on a look: saved to the photo on screen whatever the panel's mode, with a notice in the panel.
+    func applyLookToCurrent(_ id: Int) {
+        guard let c = current, let k = lookKey(id) else { return }
+        ppID = id
+        chosenLook = k
+        edit([c]) { $0.look = k }
+        refreshPreview()
+        if zoomed { refreshZoom(force: true) }
+        let name = looks.first { $0.id == id }?.title ?? "Look"
+        lutNoticeGen += 1
+        let gen = lutNoticeGen
+        withAnimation(.easeOut(duration: 0.15)) { lutNotice = "\(name) → \(c.lastPathComponent)" }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 1.8) { [weak self] in
+            guard let self, self.lutNoticeGen == gen else { return }
+            withAnimation(.easeIn(duration: 0.3)) { self.lutNotice = nil }
+        }
+    }
+    @Published private(set) var lutNotice: String?
+    private var lutNoticeGen = 0
 
     /// The look to show for the current photo, by the LUT panel's mode.
     func syncLookFromState() {
