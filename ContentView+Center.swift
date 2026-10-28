@@ -185,6 +185,7 @@ extension ContentView {
                 HStack {
                     Toggle("Highlight recovery", isOn: $m.highlightRecovery).font(.caption)
                         .onChange(of: m.highlightRecovery) { _, _ in m.developChanged() }
+                        .disabled(m.current.map(BitmapPhoto.isBitmap) ?? false)        // a JPG has no highlights to recover
                         .help("Brings back detail in bright areas that would otherwise clip to white")
                     Spacer()
                     Button("Reset") { m.resetAdjustments(); m.developChanged() }.controlSize(.small)
@@ -276,7 +277,7 @@ extension ContentView {
                         ForEach(m.shownPhotos) { p in
                             GridCell(photo: p, isCurrent: p.url == m.current, isSelected: m.selection.contains(p.url),
                                      size: m.gridCell, image: thumbs.images[p.url], hovered: thumbs.hovered == p.url, store: thumbs,
-                                     markBox: m.advancedSelection, onMark: { m.toggleMark(p.url) })
+                                     markBox: m.advancedSelection, showKind: m.showKind, onMark: { m.toggleMark(p.url) })
                                 .equatable()
                                 .id(p.url)
                                 // the click acts at once; a double-tap handler in front of it made every click wait

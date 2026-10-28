@@ -118,8 +118,14 @@ final class ZoomState: ObservableObject {
 @MainActor
 final class Model: ObservableObject {
     // Library
-    @Published var library: [Photo] = [] {
-        didSet { PhotoBadges.showKind = Set(library.lazy.map(\.kind)).count > 1 }   // badge the type only in a mixed folder
+    @Published var library: [Photo] = []
+    /// More than one file type in the folder: only then does each cell say which it is. Recomputed where photos are
+    /// added or removed, not on every write to `library` (metadata updates write one element at a time).
+    @Published private(set) var showKind = false
+    func updateKindBadges() {
+        guard let first = library.first?.kind else { if showKind { showKind = false }; return }
+        let mixed = library.contains { $0.kind != first }
+        if mixed != showKind { showKind = mixed }
     }
     @Published var shownPhotos: [Photo] = [] {
         didSet {
@@ -386,6 +392,7 @@ final class Model: ObservableObject {
     private var undoneToNothing: Set<URL> = []
     private var saveTask: Task<Void, Never>?
     private var clipboard: (state: PhotoState, parts: Set<CopyPart>)?
+    private var clipboardFromBitmap = false
     let shortcuts = ShortcutStore()
     @Published var meteringMode: MeteringMode = MeteringMode(rawValue: UserDefaults.standard.string(forKey: "meteringMode") ?? "") ?? .matrix {
         didSet { UserDefaults.standard.set(meteringMode.rawValue, forKey: "meteringMode") }
@@ -936,6 +943,7 @@ final class Model: ObservableObject {
         var s = currentState
         if parts.contains(.whiteBalance), s.temp == nil, let a = asShot { s.temp = a.temp; s.tint = a.tint }
         clipboard = (s, parts)
+        clipboardFromBitmap = BitmapPhoto.isBitmap(c)
         status = "Copied " + describe(parts, s)
         notify(.copyPaste, status, icon: "doc.on.doc")
     }
@@ -951,8 +959,11 @@ final class Model: ObservableObject {
         guard !ts.isEmpty else { return }
         edit(ts) { s in
             if parts.contains(.develop) { s.ev = c.ev; s.contrast = c.contrast; s.hl = c.hl }
-            if parts.contains(.whiteBalance) { s.temp = c.temp; s.tint = c.tint }
             if parts.contains(.look) { s.look = c.look }
+        }
+        // white balance only onto the same kind: a RAW's Kelvin is the light, a JPG's is a shift of the picture
+        if parts.contains(.whiteBalance) {
+            edit(ts.filter { BitmapPhoto.isBitmap($0) == clipboardFromBitmap }) { s in s.temp = c.temp; s.tint = c.tint }
         }
         status = "Pasted " + describe(parts, c) + " to \(ts.count) photo(s)"
         notify(.copyPaste, status, icon: "doc.on.clipboard")
@@ -978,8 +989,9 @@ final class Model: ObservableObject {
         let st = currentState
         guard let t = st.temp ?? asShot?.temp else { status = "White balance not read yet, try again in a moment"; return }
         let ti = st.tint ?? asShot?.tint ?? 0
-        let targets = urls.filter { $0 != c }
-        guard !targets.isEmpty else { status = "Nothing to copy to: only this photo is selected"; return }
+        // only onto the same kind: a RAW's Kelvin is the light, a JPG's is a shift of the picture
+        let targets = urls.filter { $0 != c && BitmapPhoto.isBitmap($0) == BitmapPhoto.isBitmap(c) }
+        guard !targets.isEmpty else { status = "Nothing to copy to (white balance goes only from RAW to RAW, or JPG to JPG)"; return }
         edit(targets) { $0.temp = t; $0.tint = ti }
         status = String(format: "Copied %.0f K / %+.0f to %d photo(s)", t, ti, targets.count)
         notify(.whiteBalance, String(format: "White balance %.0f K / %+.0f copied to %d photo(s)", t, ti, targets.count), icon: "thermometer.sun")
@@ -988,7 +1000,11 @@ final class Model: ObservableObject {
     func applyCurrentSettings(to scope: [URL]) {
         if let u = current { ensureRead([u]) }
         let c = currentState
-        edit(scope) { $0 = c }
+        let bitmap = current.map(BitmapPhoto.isBitmap) ?? false
+        edit(scope.filter { BitmapPhoto.isBitmap($0) == bitmap }) { $0 = c }
+        edit(scope.filter { BitmapPhoto.isBitmap($0) != bitmap }) { s in       // the other kind keeps its own WB
+            let (t, ti) = (s.temp, s.tint); s = c; s.temp = t; s.tint = ti
+        }
         status = "Applied current settings to \(scope.count) photo(s)"
         refreshAll()
     }
@@ -1239,7 +1255,8 @@ final class Model: ObservableObject {
                     }
                     send()
                 }
-            } else if rawExtensions.contains(u.pathExtension.lowercased()) || bitmapExtensions.contains(u.pathExtension.lowercased()) {
+            } else if (rawExtensions.contains(u.pathExtension.lowercased()) && (u.pathExtension.lowercased() != "raw" || Model.isPanasonicRAW(u)))
+                        || bitmapExtensions.contains(u.pathExtension.lowercased()) {
                 found.append(u)
             } else { r.sawNonRAWFile = true }
         }
@@ -1297,7 +1314,7 @@ final class Model: ObservableObject {
         } else {
             appendScanned(batch.map { Photo(url: $0) })
         }
-        status = "Scanning… \(library.count) RAW file(s) so far"
+        status = "Scanning… \(library.count) photo(s) so far"
     }
 
     /// The library's order: by path, compared byte by byte (a Unicode-aware compare was most of the main thread's
@@ -1320,6 +1337,7 @@ final class Model: ObservableObject {
         let fresh = photos.filter { libIndex[$0.url] == nil }
         guard !fresh.isEmpty else { return }
         library = Model.merge(library, fresh.sorted { Model.pathOrder($0.url, $1.url) })
+        updateKindBadges()
         libIndex = Dictionary(uniqueKeysWithValues: library.enumerated().map { ($1.url, $0) })
         metadataUnread += fresh.count
         metaReader?.add(fresh.map(\.url))
@@ -1337,7 +1355,7 @@ final class Model: ObservableObject {
         appendScanned(scan.photos)
         metaReader?.close()
         restoreName = nil
-        status = "\(library.count) RAW file(s)" + (shownPhotos.count != library.count ? ", \(shownPhotos.count) shown" : "")
+        status = "\(library.count) photo(s)" + (shownPhotos.count != library.count ? ", \(shownPhotos.count) shown" : "")
     }
 
     private func finishLoad(_ urls: [URL], _ scan: ScanResult, recursive rec: Bool, streaming: Bool = false) {
@@ -1350,6 +1368,7 @@ final class Model: ObservableObject {
         let photos = scan.photos
         let found = photos.map(\.url)
         library = photos
+        updateKindBadges()
         libIndex = Dictionary(uniqueKeysWithValues: photos.enumerated().map { ($1.url, $0) })
         selection = []
         selectionAnchor = nil
@@ -1387,7 +1406,7 @@ final class Model: ObservableObject {
             select(nil)
         } else {
             emptyHint = shownPhotos.isEmpty ? "All \(found.count) photos are hidden by the filter." : nil
-            status = "\(found.count) RAW file(s)" + (shownPhotos.count != found.count ? ", \(shownPhotos.count) shown" : "")
+            status = "\(found.count) photo(s)" + (shownPhotos.count != found.count ? ", \(shownPhotos.count) shown" : "")
             select(restore ?? shownPhotos.first?.url)
         }
         autoSelected = current
@@ -1709,14 +1728,26 @@ final class Model: ObservableObject {
                 if fm.fileExists(atPath: dest.path) { r.failed.append("\(u.lastPathComponent) is already there"); continue }
                 try fm.moveItem(at: u, to: dest)
                 r.raws.append(u); r.files.append((u, dest))
-                // a.ARW + a.DNG share a.xmp: it goes with the first one
-                for c in [XMPFile.url(for: u), XMPFile.backupURL(for: u), XMPFile.oldBackupURL(for: u)] where fm.fileExists(atPath: c.path) {
+                // a.ARW + a.DNG share a.xmp: it goes with the first one. A RAW's JPG twin goes too, or the next
+                // load would list it in the RAW's place.
+                for c in [XMPFile.url(for: u), XMPFile.backupURL(for: u), XMPFile.oldBackupURL(for: u)] + jpgTwins(of: u) where fm.fileExists(atPath: c.path) {
                     let cd = d.appendingPathComponent(c.lastPathComponent)
                     if !fm.fileExists(atPath: cd.path), (try? fm.moveItem(at: c, to: cd)) != nil { r.files.append((c, cd)) }
                 }
             } catch { r.failed.append("\(u.lastPathComponent): \(error.localizedDescription)") }
         }
         return r
+    }
+
+    /// The camera's JPG of a RAW+JPG pair (same name, any case of .jpg / .jpeg), in the RAW's folder.
+    nonisolated static func jpgTwins(of raw: URL) -> [URL] {
+        guard rawExtensions.contains(raw.pathExtension.lowercased()) else { return [] }
+        let dir = raw.deletingLastPathComponent(), stem = raw.deletingPathExtension().lastPathComponent.lowercased()
+        let names = (try? FileManager.default.contentsOfDirectory(atPath: dir.path)) ?? []
+        return names.filter {
+            let n = $0 as NSString
+            return bitmapExtensions.contains(n.pathExtension.lowercased()) && n.deletingPathExtension.lowercased() == stem
+        }.map { dir.appendingPathComponent($0) }
     }
 
     private func rejectedMoved(_ r: MoveResult, recordUndo: Bool) {
@@ -1756,6 +1787,7 @@ final class Model: ObservableObject {
                 MainActor.assumeIsolated {
                     let ps = photos.filter { back.contains($0.url) && self.libIndex[$0.url] == nil }
                     self.library = Model.merge(self.library, ps.sorted { Model.pathOrder($0.url, $1.url) })
+                    self.updateKindBadges()
                     self.libIndex = Dictionary(uniqueKeysWithValues: self.library.enumerated().map { ($1.url, $0) })
                     for (u, st) in saved where back.contains(u) { self.states[u] = st }
                     self.recomputeView(selectFirst: false)
@@ -1769,6 +1801,7 @@ final class Model: ObservableObject {
     private func removeFromLibrary(_ gone: Set<URL>) {
         guard !gone.isEmpty else { return }
         library.removeAll { gone.contains($0.url) }
+        updateKindBadges()
         libIndex = Dictionary(uniqueKeysWithValues: library.enumerated().map { ($1.url, $0) })
         for u in gone { states[u] = nil; frvCache[u] = nil }
         selection.subtract(gone)

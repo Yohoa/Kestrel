@@ -29,7 +29,7 @@ struct FilmstripView: View {
                     ForEach(m.shownPhotos) { p in
                         FilmCell(photo: p, isCurrent: p.url == m.current, isSelected: m.selection.contains(p.url),
                                  image: thumbs.images[p.url], hovered: thumbs.hovered == p.url, store: thumbs,
-                                 markBox: m.advancedSelection, onMark: { m.toggleMark(p.url) })
+                                 markBox: m.advancedSelection, showKind: m.showKind, onMark: { m.toggleMark(p.url) })
                             .equatable()
                             .id(p.url)
                             .help(p.name + " — ⌘-click to add or remove from the selection, ⇧-click for a range, right-click for more")

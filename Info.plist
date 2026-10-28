@@ -16,6 +16,7 @@
 			<key>LSItemContentTypes</key>
 			<array>
 				<string>public.camera-raw-image</string>
+				<string>public.jpeg</string>
 			</array>
 		</dict>
 		<dict>

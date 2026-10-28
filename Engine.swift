@@ -422,12 +422,26 @@ enum BitmapPhoto {
 
     static func decode(_ url: URL, adj: Adjust, scale: Float) -> CIImage? {
         Storage.warmWholeFile(url)
-        guard var img = CIImage(contentsOf: url, options: [.applyOrientationProperty: true]) else { return nil }
-        img = img.transformed(by: CGAffineTransform(translationX: -img.extent.minX, y: -img.extent.minY))
-        if scale < 0.999 {
-            img = img.applyingFilter("CILanczosScaleTransform", parameters: ["inputScale": scale, "inputAspectRatio": 1])
-        }
-        return adjusted(img, adj)
+        guard let img = scale < 0.999 ? reduced(url, scale: scale)
+                : CIImage(contentsOf: url, options: [.applyOrientationProperty: true]) else { return nil }
+        return adjusted(img.transformed(by: CGAffineTransform(translationX: -img.extent.minX, y: -img.extent.minY)), adj)
+    }
+
+    /// A smaller decode straight from ImageIO (the JPEG is scaled while it is decoded: fast, and a huge panorama
+    /// never goes through Core Image at full size), turned upright, with clean edges.
+    private static func reduced(_ url: URL, scale: Float) -> CIImage? {
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let p = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
+              let w = p[kCGImagePropertyPixelWidth] as? Int, let h = p[kCGImagePropertyPixelHeight] as? Int else { return nil }
+        let side = max(1, Int((Float(max(w, h)) * scale).rounded()))
+        let opts: [CFString: Any] = [
+            kCGImageSourceCreateThumbnailFromImageAlways: true,          // never the small embedded thumbnail
+            kCGImageSourceCreateThumbnailWithTransform: true,
+            kCGImageSourceThumbnailMaxPixelSize: side,
+            kCGImageSourceShouldCacheImmediately: true,
+        ]
+        guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
+        return CIImage(cgImage: cg)
     }
 
     static func adjusted(_ img: CIImage, _ adj: Adjust) -> CIImage {

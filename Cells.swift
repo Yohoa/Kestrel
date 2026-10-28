@@ -100,10 +100,9 @@ func labelColor(_ name: String?) -> Color {
 // MARK: - Badges shared by filmstrip and grid cells
 
 struct PhotoBadges: View {
-    /// More than one file type in the folder (set with the library): only then does each cell say which it is.
-    nonisolated(unsafe) static var showKind = false
     let photo: Photo
     let isSelected: Bool
+    var showKind = false                         // more than one file type in the folder
 
     var body: some View {
         ZStack {
@@ -113,7 +112,7 @@ struct PhotoBadges: View {
             }
             VStack {
                 HStack {
-                    if Self.showKind { badge(photo.kind) }
+                    if showKind { badge(photo.kind) }
                     Spacer()
                     if photo.unreadable { Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow) }
                     if isSelected { Image(systemName: "checkmark.circle.fill").foregroundStyle(Color.accentColor).background(Circle().fill(.white).padding(2)) }
@@ -525,11 +524,12 @@ struct FilmCell: View, Equatable {
     var hovered = false
     let store: ThumbStore                       // only to request the thumbnail and report the hover
     var markBox = false
+    var showKind = false
     var onMark: () -> Void = {}
 
     static func == (a: Self, b: Self) -> Bool {
         a.photo == b.photo && a.isCurrent == b.isCurrent && a.isSelected == b.isSelected && a.image === b.image
-            && a.hovered == b.hovered && a.markBox == b.markBox
+            && a.hovered == b.hovered && a.markBox == b.markBox && a.showKind == b.showKind
     }
 
     var body: some View {
@@ -543,7 +543,7 @@ struct FilmCell: View, Equatable {
                     }
                 }
                 .frame(width: 112, height: 80)
-                PhotoBadges(photo: photo, isSelected: isSelected).frame(width: 112, height: 80)
+                PhotoBadges(photo: photo, isSelected: isSelected, showKind: showKind).frame(width: 112, height: 80)
                 MarkBox(photo: photo, isSelected: isSelected, enabled: markBox, onToggle: onMark, hovered: hovered)
                     .frame(width: 112, height: 80, alignment: .topTrailing)
             }
@@ -570,11 +570,12 @@ struct GridCell: View, Equatable {
     var hovered = false
     let store: ThumbStore                       // only to request the thumbnail and report the hover
     var markBox = false
+    var showKind = false
     var onMark: () -> Void = {}
 
     static func == (a: Self, b: Self) -> Bool {
         a.photo == b.photo && a.isCurrent == b.isCurrent && a.isSelected == b.isSelected && a.size == b.size && a.image === b.image
-            && a.hovered == b.hovered && a.markBox == b.markBox
+            && a.hovered == b.hovered && a.markBox == b.markBox && a.showKind == b.showKind
     }
 
     var body: some View {
@@ -588,7 +589,7 @@ struct GridCell: View, Equatable {
                     }
                 }
                 .frame(width: size, height: size * 0.72)
-                PhotoBadges(photo: photo, isSelected: isSelected).frame(width: size, height: size * 0.72)
+                PhotoBadges(photo: photo, isSelected: isSelected, showKind: showKind).frame(width: size, height: size * 0.72)
                 MarkBox(photo: photo, isSelected: isSelected, enabled: markBox, onToggle: onMark, hovered: hovered)
                     .frame(width: size, height: size * 0.72, alignment: .topTrailing)
             }
