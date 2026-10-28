@@ -8,7 +8,7 @@ Newest first. Dates are when the change was made.
 
 ## Unreleased (since 1.5.2)
 
-- **⌘C copies the edited photo as HEIC** by default: 10-bit, a few MB (4.3 MB for a 24 MP photo) instead of a ~96 MB TIFF. An app that only takes TIFF gets an 8-bit one, made when it pastes. Settings ▸ Export ▸ "⌘C copies the edited photo as" switches back to TIFF (lossless, now without the unused alpha channel).
+- **⌘C copies the edited photo as HEIC** by default: 10-bit, a few MB (4.3 MB for a 24 MP photo) instead of a ~96 MB TIFF. An app that only takes TIFF gets an 8-bit one, made when it pastes. Settings ▸ Export ▸ "⌘C copies the edited photo as" chooses HEIC (default), JPG (8-bit, opens anywhere) or TIFF (lossless, now without the unused alpha channel).
 - **⌘C also puts the file on the clipboard** (`<photo>_<look>.heic`, kept in ~/Library/Caches/Kestrel/Clipboard): pasting in Finder makes a real file, Mail and Messages attach it, image apps take the picture. Copies older than a day (or beyond 300 MB) are cleared at launch.
 
 ## 1.5.2 — 2026-10-28

@@ -361,6 +361,11 @@ enum Engine {
         ctx.tiffRepresentation(of: img, format: .RGBX8, colorSpace: look.space)
     }
 
+    static func jpeg(_ img: CIImage, _ look: PPLook, quality: Float) -> Data? {
+        let key = CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String)
+        return ctx.jpegRepresentation(of: img, colorSpace: look.space, options: [key: quality])
+    }
+
     static func heic10(_ img: CIImage, _ look: PPLook, quality: Float) throws -> Data {
         let key = CIImageRepresentationOption(rawValue: kCGImageDestinationLossyCompressionQuality as String)
         return try ctx.heif10Representation(of: img, colorSpace: look.space, options: [key: quality])

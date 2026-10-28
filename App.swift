@@ -463,10 +463,16 @@ final class Model: ObservableObject {
     @Published var copySidecar = UserDefaults.standard.object(forKey: "exportCopySidecar") as? Bool ?? true {
         didSet { UserDefaults.standard.set(copySidecar, forKey: "exportCopySidecar") }
     }
-    /// What ⌘C puts on the clipboard: HEIC (small, lossy, at the export quality) or TIFF (lossless, but ~72 MB for a
-    /// 24 MP photo, more than most apps take in comfortably). macOS hands a TIFF to apps that ask for one either way.
-    @Published var copyAsTIFF = UserDefaults.standard.bool(forKey: "copyAsTIFF") {
-        didSet { UserDefaults.standard.set(copyAsTIFF, forKey: "copyAsTIFF") }
+    /// What ⌘C puts on the clipboard: HEIC (10-bit, small), JPG (8-bit, small, pastes into anything) or TIFF
+    /// (lossless, large). The lossy ones use the export quality.
+    enum CopyFormat: String, CaseIterable, Identifiable {
+        case heic, jpg, tiff
+        var id: String { rawValue }
+        var title: String { switch self { case .heic: "HEIC"; case .jpg: "JPG"; case .tiff: "TIFF" } }
+        var type: UTType { switch self { case .heic: .heic; case .jpg: .jpeg; case .tiff: .tiff } }
+    }
+    @Published var copyFormat = CopyFormat(rawValue: UserDefaults.standard.string(forKey: "copyFormat") ?? "") ?? .heic {
+        didSet { UserDefaults.standard.set(copyFormat.rawValue, forKey: "copyFormat") }
     }
     @Published var quality = UserDefaults.standard.object(forKey: "exportQuality") as? Double ?? 0.85 {
         didSet { UserDefaults.standard.set(quality, forKey: "exportQuality") }
@@ -2794,15 +2800,19 @@ final class Model: ObservableObject {
         let look = self.look
         let dec = Decoded(url: url, adj: state(for: url).adjust, scale: 1)
         let name = url.deletingPathExtension().lastPathComponent
-        let tiff = copyAsTIFF, q = Float(quality)
-        let fileName = "\(name)_\(look.fileName).\(tiff ? "tiff" : "heic")"
+        let format = copyFormat, q = Float(quality)
+        let fileName = "\(name)_\(look.fileName).\(format.rawValue)"
         status = "Rendering \(name) for the clipboard…"
         Task.detached(priority: .userInitiated) { [weak self] in
             // HEIC: the same 10-bit file Export writes; TIFF: 8-bit RGB without the alpha channel nobody uses
             var data: Data?, size = CGSize.zero, file: URL?
             if let img = dec.render(look) {
                 size = img.extent.size
-                data = tiff ? Engine.tiffRGB(img, look) : try? Engine.heic10(img, look, quality: q)
+                switch format {
+                case .heic: data = try? Engine.heic10(img, look, quality: q)
+                case .jpg: data = Engine.jpeg(img, look, quality: q)
+                case .tiff: data = Engine.tiffRGB(img, look)
+                }
             }
             if let data { file = ClipboardFiles.write(data, name: fileName) }
             await MainActor.run {
@@ -2817,26 +2827,24 @@ final class Model: ObservableObject {
                 NSPasteboard.general.clearContents()
                 let item = NSPasteboardItem()
                 if let file { item.setString(file.absoluteString, forType: .fileURL) }
-                if tiff {
-                    item.setData(data, forType: .tiff)
-                } else {
-                    // An app that only takes TIFF would get macOS's own conversion of the 10-bit HEIC: 16-bit and
-                    // uncompressed, ~200 MB at 24 MP. It gets Kestrel's 8-bit one instead, made on request.
-                    item.setData(data, forType: NSPasteboard.PasteboardType(UTType.heic.identifier))
+                item.setData(data, forType: NSPasteboard.PasteboardType(format.type.identifier))
+                if format != .tiff {
+                    // An app that only takes TIFF would get macOS's own conversion: from the 10-bit HEIC 16-bit and
+                    // uncompressed, ~200 MB at 24 MP. It gets Kestrel's 8-bit RGB one instead, made on request.
                     item.setDataProvider(ClipboardTIFF.shared.holding(data), forTypes: [.tiff])
                 }
                 NSPasteboard.general.writeObjects([item])
                 let dims = "\(Int(size.width)) × \(Int(size.height))", mb = String(format: "%.1f MB", Double(data.count) / 1e6)
-                self.status = "Copied the edited \(name) · \(look.title) (\(dims), \(tiff ? "TIFF" : "HEIC") \(mb)) to the clipboard"
-                self.notify(.copyPhoto, "Edited photo copied · \(look.title) · \(dims) · \(tiff ? "TIFF" : "HEIC") \(mb)", icon: "doc.on.doc")
+                self.status = "Copied the edited \(name) · \(look.title) (\(dims), \(format.title) \(mb)) to the clipboard"
+                self.notify(.copyPhoto, "Edited photo copied · \(look.title) · \(dims) · \(format.title) \(mb)", icon: "doc.on.doc")
             }
         }
     }
 
-    /// Makes the TIFF of a copied HEIC only when an app asks for it, from the HEIC itself.
+    /// Makes the TIFF of a copied HEIC or JPG only when an app asks for it, from that file itself.
     final class ClipboardTIFF: NSObject, NSPasteboardItemDataProvider {
         static let shared = ClipboardTIFF()
-        private var heic: Data?
+        private var heic: Data?                 // the HEIC or JPG
         func holding(_ d: Data) -> Self { heic = d; return self }
 
         func pasteboard(_ pasteboard: NSPasteboard?, item: NSPasteboardItem, provideDataForType type: NSPasteboard.PasteboardType) {
