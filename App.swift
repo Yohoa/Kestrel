@@ -155,6 +155,61 @@ final class Model: ObservableObject {
         }
     }
 
+    /// Folders ▸ right-click ▸ Rename…: asks for the new name, renames the folder on disk, and carries everything that
+    /// pointed into it along (expanded rows, favourites, history, the folder being browsed).
+    func renameFolder(_ url: URL) {
+        let old = url.standardizedFileURL
+        let alert = NSAlert()
+        alert.messageText = "Rename “\(old.lastPathComponent)”"
+        alert.informativeText = "New name:"
+        let field = NSTextField(string: old.lastPathComponent)
+        field.frame = NSRect(x: 0, y: 0, width: 280, height: 24)
+        alert.accessoryView = field
+        alert.addButton(withTitle: "Rename")
+        alert.addButton(withTitle: "Cancel")
+        alert.window.initialFirstResponder = field
+        guard alert.runModal() == .alertFirstButtonReturn else { return }
+        renameFolder(old, to: field.stringValue)
+    }
+
+    /// The rename itself, after the name was asked for.
+    func renameFolder(_ url: URL, to newName: String) {
+        let old = url.standardizedFileURL
+        let name = newName.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard name != old.lastPathComponent else { return }
+        func fail(_ why: String) { status = why; notify(.folderRenamed, why, icon: "exclamationmark.triangle") }
+        guard !name.isEmpty, !name.contains("/"), !name.contains(":"), !name.hasPrefix(".") else {
+            return fail("Can't rename to “\(name)”: a folder name can't be empty, start with a dot, or contain / or :")
+        }
+        let new = old.deletingLastPathComponent().appendingPathComponent(name, isDirectory: true)
+        guard !FileManager.default.fileExists(atPath: new.path) else { return fail("“\(name)” already exists there") }
+        // Everything that pointed into the old path, worked out now: standardizing a path (/private/tmp → /tmp,
+        // symlinks) only gives the same answer while the old path still exists.
+        let o = old.path, n = new.standardizedFileURL.path
+        func moved(_ p: String) -> String? { p == o ? n : p.hasPrefix(o + "/") ? n + p.dropFirst(o.count) : nil }
+        func moved(_ u: URL) -> URL { moved(u.standardizedFileURL.path).map { URL(fileURLWithPath: $0) } ?? u }
+        let expanded = Set(expandedFolders.map { moved($0) ?? $0 })
+        let favs = favorites.map(moved), recent = recentInputs.map(moved)
+        let browsing = currentFolder.flatMap { moved($0.standardizedFileURL.path) }.map { URL(fileURLWithPath: $0) }
+
+        flushSettings()
+        SidecarWriter.shared.runSync {}                  // sidecar writes for photos in there land first
+        do { try FileManager.default.moveItem(at: old, to: new) }
+        catch { return fail("Couldn't rename “\(old.lastPathComponent)”: \(error.localizedDescription)") }
+
+        expandedFolders = expanded
+        favorites = favs
+        UserDefaults.standard.set(favorites.map(\.path), forKey: "favoriteFolders")
+        recentInputs = recent
+        UserDefaults.standard.set(recentInputs.map(\.path), forKey: Self.inputsKey)
+        FolderNode.home.relistLoaded()
+        FolderVolumes.shared.nodes.forEach { $0.relistLoaded() }
+        // the folder being browsed was in it (or was it): open it again where it is now
+        if let b = browsing { load([b]) }
+        status = "Renamed “\(old.lastPathComponent)” to “\(name)”"
+        notify(.folderRenamed, status, icon: "pencil")
+    }
+
     /// The Folders panel's refresh: the home folder, the mounted volumes and every folder opened in the tree, listed
     /// again. What is expanded and the current folder stay as they are.
     func refreshFolderTree() {

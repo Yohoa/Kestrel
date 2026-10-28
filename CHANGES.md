@@ -14,6 +14,7 @@ Newest first. Dates are when the change was made.
   - RAWs and folders open from Finder (Open With, the Dock icon) into the one window.
   - A recorded shortcut that a menu already uses is refused.
   - The sidecar backup is now `.xmp.kestrel-backup`.
+- **Folders**: Rename… in a folder's right-click menu (not for the top-level folders and drives); favourites, history, expanded rows and the folder being browsed follow the new name.
 - **LUTs**: only the 27 built-in LUTs for now (their names say which camera log they expect, so there is nothing to set); choosing a LUT folder of your own, and setting a LUT's input by hand, will come back later.
 
 ## 1.3 — 2026-10-28

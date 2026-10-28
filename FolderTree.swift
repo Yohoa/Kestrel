@@ -190,6 +190,8 @@ struct FolderTreeRow: View {
             }
         }
         Button("Refresh Subfolders") { node.relist() }
+        // not the top level: Desktop, Documents, a drive or a share are not for renaming from here
+        Button("Rename…") { m.renameFolder(node.url) }.disabled(depth == 0)
         Divider()
         Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([node.url]) }
         Button("Copy Path") {
