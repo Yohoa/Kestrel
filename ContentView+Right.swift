@@ -213,6 +213,11 @@ extension ContentView {
     @ViewBuilder func lookMenu(_ look: PPLook) -> some View {
         Button { m.applyLookToCurrent(look.id) } label: { Label("Save to This Photo", systemImage: "checkmark.circle") }
             .disabled(m.current == nil)
+        let selected = m.files.filter(m.selection.contains)
+        Button { m.applyLook(look.id, to: selected) } label: {
+            Label("Apply to Selected Photos" + (selected.isEmpty ? "" : " (\(selected.count))"), systemImage: "checkmark.circle.badge.plus")
+        }
+        .disabled(selected.isEmpty)
         Button { m.toggleFavoriteLook(look.id) } label: {
             Label(m.isFavorite(look.id) ? "Remove from Favourites" : "Add to Favourites", systemImage: m.isFavorite(look.id) ? "star.slash" : "star")
         }

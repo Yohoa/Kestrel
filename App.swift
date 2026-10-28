@@ -966,6 +966,20 @@ final class Model: ObservableObject {
         if zoomed { refreshZoom(force: true) }
     }
 
+    /// LUT thumbnail ▸ Apply to Selected Photos: the look saved to each of them (one undo step), whatever the mode.
+    func applyLook(_ id: Int, to urls: [URL]) {
+        guard !urls.isEmpty, let k = lookKey(id) else { return }
+        edit(urls) { $0.look = k }
+        if let c = current, urls.contains(c) {
+            ppID = id; chosenLook = k
+            refreshPreview()
+            if zoomed { refreshZoom(force: true) }
+        }
+        let name = look(id).title
+        status = "\(name) saved to \(urls.count) photo(s)"
+        notify(.lookSaved, "\(name) → \(urls.count) selected photo(s)", icon: "checkmark.circle.fill")
+    }
+
     /// Double-click on a look: saved to the photo on screen whatever the panel's mode, with a notice in the panel.
     func applyLookToCurrent(_ id: Int) {
         guard let c = current, let k = lookKey(id) else { return }
