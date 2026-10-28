@@ -78,17 +78,44 @@ extension ContentView {
             .buttonStyle(.plain).disabled(m.currentFolder == nil)
             .help(m.currentIsFavorite ? "Remove the current folder from favourites" : "Add the current folder to favourites")
         }) {
-            List(m.favorites, id: \.self) { u in
-                Label(u.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"), systemImage: "folder.fill")
-                    .lineLimit(1).truncationMode(.middle)
-                    .contentShape(Rectangle())
-                    .help("Click to open \(u.path). Right-click to remove")
-                    .onTapGesture { m.load([u]) }
-                    .contextMenu { Button("Remove") { m.removeFavorite(u) } }
+            Observing(FolderReach.shared) { reach in
+                List(m.favorites, id: \.self) { u in favoriteRow(u, reach: reach) }
+                    .listStyle(.plain)
+                    .scrollContentBackground(.hidden)
             }
-            .listStyle(.plain)
-            .scrollContentBackground(.hidden)
+            .onAppear { FolderReach.shared.check(m.favorites) }
+            .onChange(of: m.favorites) { _, f in FolderReach.shared.check(f) }
         }
+    }
+
+    /// A favourite that can't be reached (a share not connected, a drive unplugged) is greyed with a warning sign;
+    /// clicking it says so in the row for a moment instead of opening an empty folder.
+    func favoriteRow(_ u: URL, reach: FolderReach) -> some View {
+        let off = reach.unreachable.contains(u), flash = reach.flashing == u
+        let network = u.path.hasPrefix("/Volumes/")
+        return HStack(spacing: 6) {
+            Image(systemName: off ? (network ? "network.slash" : "folder.badge.questionmark") : "folder.fill")
+                .foregroundStyle(off ? Color.orange : Color.accentColor)
+                .frame(width: 18)
+            if flash {
+                Text(network ? "Can't access: the network drive is not connected" : "Can't access: this folder is not there")
+                    .foregroundStyle(.orange).lineLimit(1).truncationMode(.tail)
+                    .transition(.opacity)
+            } else {
+                Text(u.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
+                    .foregroundStyle(off ? .secondary : .primary)
+                    .lineLimit(1).truncationMode(.middle)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.vertical, 1)
+        .background(RoundedRectangle(cornerRadius: 4).fill(flash ? Color.orange.opacity(0.18) : .clear))
+        .contentShape(Rectangle())
+        .help(off ? (network ? "Can't access \(u.path): the network drive is not connected. Connect it in Finder, then click again."
+                             : "Can't access \(u.path): the folder was moved, renamed or its drive unplugged.") + " Right-click to remove"
+                  : "Click to open \(u.path). Right-click to remove")
+        .onTapGesture { FolderReach.shared.open(u) { m.load([$0]) } }
+        .contextMenu { Button("Remove") { m.removeFavorite(u) } }
     }
 
     var exifPanel: some View {

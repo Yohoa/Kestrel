@@ -206,3 +206,73 @@ struct FolderTreeRow: View {
         }
     }
 }
+
+/// Which favourite folders can be opened right now. A share that is not connected (or a drive that is unplugged)
+/// is checked off the main thread with a time limit, since a share that dropped can make a plain file check hang;
+/// checked again when something is mounted or unmounted, and on every click.
+@MainActor
+final class FolderReach: ObservableObject {
+    static let shared = FolderReach()
+    @Published private(set) var unreachable: Set<URL> = []
+    /// The row that was just clicked but could not be opened: it says so for a moment.
+    @Published private(set) var flashing: URL?
+    private var flashWork: DispatchWorkItem?
+
+    private init() {
+        let nc = NSWorkspace.shared.notificationCenter
+        for n in [NSWorkspace.didMountNotification, NSWorkspace.didUnmountNotification] {
+            nc.addObserver(forName: n, object: nil, queue: .main) { _ in
+                MainActor.assumeIsolated { FolderReach.shared.check(FolderReach.shared.watched) }
+            }
+        }
+    }
+
+    private var watched: [URL] = []
+
+    /// Checks these folders (the favourites) and remembers them for the next mount / unmount.
+    func check(_ urls: [URL]) {
+        watched = urls
+        for u in urls { probe(u) { [weak self] ok in self?.set(u, ok) } }
+    }
+
+    /// Opens the folder if it can be reached, else flashes the row.
+    func open(_ u: URL, _ load: @escaping (URL) -> Void) {
+        probe(u) { [weak self] ok in
+            guard let self else { return }
+            set(u, ok)
+            if ok { load(u) } else { flash(u) }
+        }
+    }
+
+    private func set(_ u: URL, _ ok: Bool) {
+        if ok { if unreachable.contains(u) { unreachable.remove(u) } }
+        else if !unreachable.contains(u) { unreachable.insert(u) }
+    }
+
+    private func flash(_ u: URL) {
+        flashWork?.cancel()
+        withAnimation(.easeOut(duration: 0.15)) { flashing = u }
+        let w = DispatchWorkItem { [weak self] in withAnimation(.easeIn(duration: 0.3)) { self?.flashing = nil } }
+        flashWork = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.2, execute: w)
+    }
+
+    /// Whether the folder exists and can be listed, answered within 2 s (no answer = not reachable).
+    private func probe(_ u: URL, _ done: @escaping @MainActor (Bool) -> Void) {
+        let lock = NSLock()
+        var answered = false
+        func answer(_ ok: Bool) {
+            lock.lock(); defer { lock.unlock() }
+            guard !answered else { return }
+            answered = true
+            DispatchQueue.main.async { MainActor.assumeIsolated { done(ok) } }
+        }
+        DispatchQueue.global(qos: .utility).async {
+            var isDir: ObjCBool = false
+            let ok = FileManager.default.fileExists(atPath: u.path, isDirectory: &isDir) && isDir.boolValue
+                && FileManager.default.isReadableFile(atPath: u.path)
+            answer(ok)
+        }
+        DispatchQueue.global(qos: .utility).asyncAfter(deadline: .now() + 2) { answer(false) }
+    }
+}
