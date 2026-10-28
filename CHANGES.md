@@ -7,8 +7,8 @@ Newest first. Dates are when the change was made.
 - **Import your own LUTs**: choose a folder of `.cube` files again, with a way to set the input space (camera log) of a LUT whose name doesn't say it. Overrides kept outside the app (never inside it).
 
 ## Unreleased (since 1.5)
-- Hover tips on nearly every control: status bar, panel headers, Develop / White Balance rows, filter rows, LUT cells, folder rows, Export and Settings.
 
+- **Hover tips** on nearly every control: status bar, panel headers, Develop / White Balance rows, filter rows, LUT cells, folder rows, Export and Settings.
 - **Folders**: the tree was empty when no drive or network share was mounted (the home folder was never listed); fixed, and ↻ lists it too if it hadn't been.
 
 ## 1.5 — 2026-10-28
