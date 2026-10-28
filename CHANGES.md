@@ -9,6 +9,7 @@ Newest first. Dates are when the change was made.
 ## 1.5.2 — 2026-10-28
 
 - **JPGs without a RAW**: a JPG is shown when no RAW of the same name sits next to it (RAW + JPG pairs still show once, as the RAW). Exposure, white balance (with Pick neutral and Auto WB), contrast and looks work on it; "As shot" is the picture as it is (6500 K / 0); highlight recovery does not apply.
+- **Move to _Rejected** takes a RAW's JPG along (⌘Z brings both back). White balance is copied and pasted only RAW to RAW or JPG to JPG (a RAW's Kelvin is the light, a JPG's a shift of the picture).
 - **Every RAW format macOS reads**: besides ARW, RAF and DNG, now Canon CR2 / CR3 / CRW, Nikon NEF / NRW, Olympus ORF, Panasonic RW2 / RAW, Leica RWL, Pentax PEF, Samsung SRW, Sony SRF / SR2, Olympus ORI, Hasselblad 3FR / FFF, Phase One IIQ, Epson ERF, Leaf MOS, Minolta MRW and Kodak DCR (a .raw only when it is a Panasonic / Leica file) (which camera models decode is up to macOS). Sort & Filter ▸ File type lists the types in the folder; Finder's Open With offers Kestrel for any RAW file. A cell shows its file type only when the folder mixes types.
 
 ## 1.5.1 — 2026-10-28
