@@ -69,7 +69,7 @@ enum OutputMode: String, CaseIterable, Identifiable {
 }
 
 enum SheetKind: String, Identifiable {
-    case export, help, welcome, tips
+    case export, help, welcome, tips, update
     var id: String { rawValue }
 }
 
@@ -527,6 +527,11 @@ final class Model: ObservableObject {
     var clickMonitor: Any?
     let undo = UndoStore()
     let notices = NoticeCenter()
+    let updater = Updater()
+    private var updateSink: AnyCancellable?
+
+    /// Kestrel ▸ Check for Updates…
+    func checkForUpdates() { sheet = .update; updater.check(userAsked: true) }
 
     /// A notice where the action happened (see Notices.swift); the status bar text is set by the caller as before.
     func notify(_ kind: NoticeKind, _ text: String, icon: String) { notices.post(kind, text, icon: icon) }
@@ -559,6 +564,12 @@ final class Model: ObservableObject {
         DispatchQueue.main.async { [weak self] in self?.applyTheme() }
         // Welcome on the first launch, a tip on later ones, once the window is on screen
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.showLaunchScreen() }
+        // a newer version found by the daily check opens the update sheet (not over another sheet)
+        updateSink = updater.$phase.sink { [weak self] p in
+            guard let self, case .available = p, self.sheet == nil || self.sheet == .tips else { return }
+            DispatchQueue.main.async { self.sheet = .update }
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in self?.updater.checkAtLaunch() }
         let torn = detachedPanels.compactMap(Panel.init(rawValue:))
         detachedPanels = []
         if !torn.isEmpty { DispatchQueue.main.async { [weak self] in torn.forEach { self?.detach($0) } } }

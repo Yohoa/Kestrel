@@ -75,6 +75,7 @@ struct ContentView: View {
             case .help: helpSheet
             case .welcome: WelcomeView(m: m)
             case .tips: TipsView(m: m)
+            case .update: UpdateView(updater: m.updater) { m.sheet = nil }
             }
         }
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in dropFiles(providers) }

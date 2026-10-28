@@ -182,6 +182,7 @@ struct SettingsView: View {
                     ForEach(MeteringMode.allCases) { Text($0.title).tag($0) }
                 }
             }
+            UpdateSettings(m: m, updater: m.updater)
             ShortcutSettings(store: m.shortcuts)
             NoticeSettings(center: m.notices)
             Section("Export") {
@@ -200,3 +201,24 @@ struct SettingsView: View {
 
 /// One row of the folder tree. Expansion lives in the model, so opening a folder anywhere (History, Favourites,
 /// drag & drop, last folder at launch) unfolds the tree down to it and highlights it.
+
+/// Settings ▸ Updates.
+struct UpdateSettings: View {
+    let m: Model
+    @ObservedObject var updater: Updater
+
+    var body: some View {
+        Section("Updates") {
+            Toggle("Check for updates automatically (once a day)", isOn: $updater.autoCheck)
+            HStack {
+                Text(updater.lastCheck.map { "Last checked " + $0.formatted(date: .abbreviated, time: .shortened) } ?? "Not checked yet")
+                    .font(.caption).foregroundStyle(.secondary)
+                Spacer()
+                Button("Check Now") { m.checkForUpdates() }
+            }
+            Text("Kestrel \(Updater.currentVersion). New versions come from github.com/\(Updater.repo)/releases and are checked before they replace this one.")
+                .font(.caption).foregroundStyle(.secondary)
+        }
+    }
+}
+

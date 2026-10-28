@@ -171,6 +171,7 @@ struct PanelCommands: Commands {
     var body: some Commands {
         CommandGroup(replacing: .appInfo) {
             Button("About Kestrel") { NSApp.orderFrontStandardAboutPanel(options: [.credits: Self.credits]) }
+            Button("Check for Updates…") { m.checkForUpdates() }
         }
         // File
         CommandGroup(replacing: .newItem) {

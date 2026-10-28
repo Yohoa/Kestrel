@@ -2,8 +2,13 @@
 
 Newest first. Dates are when the change was made.
 
-## Unreleased (since 1.3)
+## Planned
 
+- **Import your own LUTs**: choose a folder of `.cube` files again, with a way to set the input space (camera log) of a LUT whose name doesn't say it. Overrides kept outside the app (never inside it).
+
+## 1.4 — 2026-10-28
+
+- **Updates**: Kestrel ▸ Check for Updates…, and a check once a day (Settings ▸ Updates). A new version is downloaded from the GitHub release, checked against its SHA-256 and the signing certificate, put in place and relaunched.
 - **Welcome** screen on the first launch and a **tip** at later launches (Close / Don't Show Again; Help menu).
 - **Fewer surprises** (from a review of what could confuse a new user):
   - Trying looks no longer saves them: the LUT panel starts in Preview, and the default look is Base. Sony's picture profiles are called "Sony PP1 Movie" … "Sony PP10 HLG".
