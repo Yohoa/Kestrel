@@ -56,15 +56,16 @@ struct ContentView: View {
                 }
             }
             DispatchQueue.main.async { m.layoutStore.fitToWindow() }
-            w.minSize = NSSize(width: 1100, height: 700)
-            if w.frame.width < 1100 || w.frame.height < 700 {           // a restored frame that is far too small
+            // Small enough for an iPad as a Sidecar display or a split screen: the side columns shrink, then fold.
+            w.minSize = NSSize(width: 760, height: 560)
+            if w.frame.width < 760 || w.frame.height < 560 {            // a restored frame that is far too small
                 let screen = w.screen?.visibleFrame ?? NSScreen.main?.visibleFrame ?? .zero
                 let size = NSSize(width: min(1500, screen.width), height: min(940, screen.height))
                 w.setFrame(NSRect(x: screen.midX - size.width / 2, y: screen.midY - size.height / 2, width: size.width, height: size.height), display: true)
             }
         })
         .environmentObject(m)
-        .frame(minWidth: 1280, minHeight: 740)
+        .frame(minWidth: 760, minHeight: 560)
         .navigationTitle(m.current?.lastPathComponent ?? "Kestrel")     // still used by the Window menu
         .toolbar(removing: .title)                                         // …but not drawn under the traffic lights
         .toolbarBackground(.hidden, for: .windowToolbar)                   // the title bar shows the window's glass

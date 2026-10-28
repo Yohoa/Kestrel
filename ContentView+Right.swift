@@ -220,8 +220,11 @@ extension ContentView {
             ZStack(alignment: .topLeading) {
                 Color.gray.opacity(0.2)
                     .aspectRatio(1.5, contentMode: .fit)
-                    .overlay { if let t = m.thumbs[look.id] { Image(nsImage: t).resizable().scaledToFill() } }
+                    // the filled thumbnail overflows its frame; clipped() hides that but does not stop it taking
+                    // clicks, so a tall photo's overflow used to select the cell below or above
+                    .overlay { if let t = m.thumbs[look.id] { Image(nsImage: t).resizable().scaledToFill().allowsHitTesting(false) } }
                     .clipped()
+                    .contentShape(Rectangle())
                 .overlay(RoundedRectangle(cornerRadius: 3).stroke(look.id == m.ppID ? Color.accentColor : .clear, lineWidth: 3))
                 Toggle("", isOn: Binding(
                     get: { m.batchPPs.contains(look.id) },
@@ -241,6 +244,7 @@ extension ContentView {
             Text(look.title).font(.caption2).lineLimit(2).multilineTextAlignment(.center)
                 .frame(maxWidth: .infinity, minHeight: 26, alignment: .top)
         }
+        .contentShape(Rectangle())
         .help(look.note + "\nDouble-click: save to this photo")
         .onTapGesture { m.chooseLook(look.id) }
         .simultaneousGesture(TapGesture(count: 2).onEnded { m.applyLookToCurrent(look.id) })

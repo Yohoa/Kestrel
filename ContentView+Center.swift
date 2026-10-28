@@ -61,7 +61,11 @@ extension ContentView {
             .contentShape(Rectangle())
             .gesture(DragGesture(minimumDistance: 3)
                 .onChanged { if m.zoomed { m.dragPan($0.translation) } }
-                .onEnded { _ in m.endPan() })
+                .onEnded { v in
+                    // not zoomed: a quick sideways drag turns the photo (a Pencil or finger on a Sidecar iPad, a mouse)
+                    if !m.zoomed { m.dragSwipe(v.translation, predicted: v.predictedEndTranslation) }
+                    m.endPan()
+                })
             .simultaneousGesture(SpatialTapGesture().onEnded { v in
                 if m.pickingWB { m.pickWhite(atFit: v.location) }
             })
@@ -102,7 +106,8 @@ extension ContentView {
         Divider()
         Button { m.quickExport() } label: { Label("Export", systemImage: "square.and.arrow.up") }.disabled(m.exporting)
         Button("Export As…") { m.exportCurrent() }.disabled(m.exporting)
-        Button { m.copyImageToClipboard() } label: { Label("Copy Image", systemImage: "doc.on.doc") }
+        Button { m.copyImageToClipboard() } label: { Label("Copy Edited Photo", systemImage: "doc.on.doc") }
+            .help("The photo as developed here (look, exposure, white balance), full size, for pasting elsewhere")
         Divider()
         Button { m.undo.undo() } label: { Label(m.undo.undoTitle.map { "Undo \($0)" } ?? "Undo", systemImage: "arrow.uturn.backward") }
             .disabled(m.undo.undoTitle == nil)

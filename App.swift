@@ -1564,8 +1564,16 @@ final class Model: ObservableObject {
     }
 
     /// Wheel / trackpad over the picture: pans when zoomed, otherwise steps through the photos.
+    /// A drag on the unzoomed photo that is clearly sideways and long (or flicked) enough turns one photo.
+    func dragSwipe(_ t: CGSize, predicted: CGSize) {
+        let x = abs(predicted.width) > abs(t.width) ? predicted.width : t.width
+        guard abs(x) >= 80, abs(t.width) >= 2 * abs(t.height) else { return }
+        step(x < 0 ? 1 : -1)
+    }
+
     func handleScroll(dx: CGFloat, dy: CGFloat, momentum: Bool = false) {
-        if !zoomed && momentum { return }                          // one flick = one step, not a dozen
+        // one flick = one step, not a dozen; a sideways swipe may come mostly as momentum (Sidecar), so it still counts
+        if !zoomed && momentum && !(abs(dx) > abs(dy) && !swipeStepped) { return }
         if zoomed {
             guard !unzooming else { return }      // a two-finger double-tap also sends empty scroll events
             zoomState.offset = clampedPan(CGSize(width: panOffset.width + dx, height: panOffset.height + dy))
@@ -2448,7 +2456,7 @@ final class Model: ObservableObject {
                 guard let cg else { self.status = "Could not render \(name)"; return }
                 NSPasteboard.general.clearContents()
                 NSPasteboard.general.writeObjects([NSImage(cgImage: cg, size: NSSize(width: cg.width, height: cg.height))])
-                self.status = "Copied \(name) · \(look.title) (\(cg.width) × \(cg.height)) to the clipboard"
+                self.status = "Copied the edited \(name) · \(look.title) (\(cg.width) × \(cg.height)) to the clipboard"
             }
         }
     }
