@@ -95,6 +95,7 @@ struct SettingsView: View {
     var body: some View {
         Form {
             Section("Startup") {
+                Toggle("Show a tip at launch", isOn: Binding(get: { m.showTipsAtLaunch }, set: { m.showTipsAtLaunch = $0 }))
                 Toggle("Open the last folder when the app starts", isOn: $m.openLastFolder)
                 Toggle("Include subfolders when opening a folder", isOn: $m.includeSubfolders)
                     .onChange(of: m.includeSubfolders) { _, _ in m.includeSubfoldersChanged() }

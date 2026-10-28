@@ -338,6 +338,8 @@ struct PanelCommands: Commands {
 
         // Help
         CommandGroup(replacing: .help) {
+            Button("Welcome to Kestrel") { m.sheet = .welcome }
+            Button("Tips…") { m.sheet = .tips }
             Button("Keyboard Shortcuts") { m.sheet = .help }.keyboardShortcut("k", modifiers: .command)
         }
     }

@@ -70,7 +70,12 @@ struct ContentView: View {
         .toolbar(removing: .title)                                         // …but not drawn under the traffic lights
         .toolbarBackground(.hidden, for: .windowToolbar)                   // the title bar shows the window's glass
         .sheet(item: $m.sheet) { kind in
-            if kind == .export { exportSheet } else { helpSheet }
+            switch kind {
+            case .export: exportSheet
+            case .help: helpSheet
+            case .welcome: WelcomeView(m: m)
+            case .tips: TipsView(m: m)
+            }
         }
         .onDrop(of: [.fileURL], isTargeted: nil) { providers in dropFiles(providers, intoLUTs: false) }
     }

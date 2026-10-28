@@ -58,7 +58,7 @@ enum OutputMode: String, CaseIterable, Identifiable {
 }
 
 enum SheetKind: String, Identifiable {
-    case export, help
+    case export, help, welcome, tips
     var id: String { rawValue }
 }
 
@@ -465,6 +465,8 @@ final class Model: ObservableObject {
             self?.notify(.undoRedo, (redo ? "Redid " : "Undid ") + label, icon: redo ? "arrow.uturn.forward" : "arrow.uturn.backward")
         }
         DispatchQueue.main.async { [weak self] in self?.applyTheme() }
+        // Welcome on the first launch, a tip on later ones, once the window is on screen
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.showLaunchScreen() }
         let torn = detachedPanels.compactMap(Panel.init(rawValue:))
         detachedPanels = []
         if !torn.isEmpty { DispatchQueue.main.async { [weak self] in torn.forEach { self?.detach($0) } } }
