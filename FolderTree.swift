@@ -23,7 +23,7 @@ final class FolderNode: ObservableObject, Identifiable, Hashable {
 
     /// This folder and every folder below it that has been listed already (opened in the tree), listed again.
     func relistLoaded() {
-        guard let kids = children else { return }
+        guard let kids = children else { loadChildren(); return }          // never listed yet: list it now
         relist()
         kids.forEach { $0.relistLoaded() }
     }
@@ -108,8 +108,12 @@ struct FolderTreeRoots: View {
     let m: Model
 
     var body: some View {
-        ForEach((home.children ?? []) + volumes.nodes) { FolderTreeRow(m: m, tree: m.folderTree, node: $0, depth: 0) }
-            .onAppear { home.loadChildren() }
+        // The listing starts from a view that is always there: an onAppear on the ForEach itself never ran while it
+        // had no rows yet, which was the case whenever no volume was mounted (the tree then stayed empty).
+        VStack(alignment: .leading, spacing: 0) {
+            ForEach((home.children ?? []) + volumes.nodes) { FolderTreeRow(m: m, tree: m.folderTree, node: $0, depth: 0) }
+        }
+        .onAppear { home.loadChildren() }
     }
 }
 
