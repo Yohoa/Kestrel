@@ -266,7 +266,7 @@ struct ValueField: View {
         let base = dragStep ?? step
         let s = mods.contains(.option) ? base / 10 : mods.contains(.shift) ? base * 10 : base
         box.dragValue = min(max(box.dragValue + Double(points) / 3 * s, range.lowerBound), range.upperBound)
-        let v = min(max((box.dragValue / s).rounded() * s, range.lowerBound), range.upperBound)
+        let v = min(max((box.dragValue / s).rounded() * s, range.lowerBound), range.upperBound) + 0   // + 0: no "−0.00"
         if v != value { value = v }
     }
 
@@ -282,8 +282,10 @@ struct ValueField: View {
 }
 
 /// Catches a press on a value field: a drag reports its movement (up and right positive), a press that does not move
-/// is a click, two quick ones a double-click. Mouse, trackpad and a finger or Pencil on a Sidecar iPad all arrive here
-/// as mouse events. Shows the up/down resize pointer over the field.
+/// is a click, two quick ones a double-click. Mouse, trackpad and the Pencil on a Sidecar iPad arrive as mouse events.
+/// Fingers on a Sidecar iPad (and two fingers on a trackpad) arrive as scrolling instead: that adjusts too, in the
+/// direction the fingers move, one gesture being one drag. A mouse wheel is left to scroll what is around.
+/// Shows the resize pointer over the field.
 struct DragToAdjust: NSViewRepresentable {
     var cursor: NSCursor = .resizeUpDown
     var onBegin: () -> Void
@@ -332,6 +334,35 @@ struct DragToAdjust: NSViewRepresentable {
             guard start != nil else { return }
             start = nil
             if dragging { dragging = false; onEnd() } else { onClick() }
+        }
+
+        private var scrolling = false
+        private var scrollEnd: DispatchWorkItem?
+
+        override func scrollWheel(with e: NSEvent) {
+            // a wheel notch, or the fling after the fingers lift: not an adjustment
+            guard e.hasPreciseScrollingDeltas, e.momentumPhase.isEmpty else {
+                if e.momentumPhase.isEmpty { super.scrollWheel(with: e) }
+                return
+            }
+            if e.phase.contains(.ended) || e.phase.contains(.cancelled) { finishScroll(); return }
+            if !scrolling { scrolling = true; onBegin() }
+            // with natural scrolling the deltas follow the content, not the fingers
+            let k: CGFloat = e.isDirectionInvertedFromDevice ? -1 : 1
+            onChange((e.scrollingDeltaY + e.scrollingDeltaX) * k, e.modifierFlags)
+            if e.phase.isEmpty {                 // no gesture phases (some touch input): end after a pause
+                scrollEnd?.cancel()
+                let w = DispatchWorkItem { [weak self] in self?.finishScroll() }
+                scrollEnd = w
+                DispatchQueue.main.asyncAfter(deadline: .now() + 0.35, execute: w)
+            }
+        }
+
+        private func finishScroll() {
+            scrollEnd?.cancel(); scrollEnd = nil
+            guard scrolling else { return }
+            scrolling = false
+            onEnd()
         }
     }
 }
