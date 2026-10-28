@@ -1968,6 +1968,18 @@ final class Model: ObservableObject {
         UserDefaults.standard.set(l.map(\.path), forKey: "favoriteFolders")
     }
 
+    /// The folder on screen is a favourite (compared by path, so /private/tmp and /tmp or a trailing slash match).
+    var currentIsFavorite: Bool {
+        guard let f = currentFolder?.standardizedFileURL.path else { return false }
+        return favorites.contains { $0.standardizedFileURL.path == f }
+    }
+
+    /// The star in the Favorite folders header: adds the folder on screen, or removes it if it is one already.
+    func toggleCurrentFavorite() {
+        guard let f = currentFolder?.standardizedFileURL.path else { return }
+        if currentIsFavorite { favorites.filter { $0.standardizedFileURL.path == f }.forEach(removeFavorite) } else { addFavorite() }
+    }
+
     func removeFavorite(_ u: URL) {
         favorites.removeAll { $0 == u }
         UserDefaults.standard.set(favorites.map(\.path), forKey: "favoriteFolders")

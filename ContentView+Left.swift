@@ -71,8 +71,12 @@ extension ContentView {
 
     var favoritesPanel: some View {
         PanelBox("Favorite folders", panel: .favorites, onClose: { m.toggle(.favorites) }, trailing: {
-            Button { m.addFavorite() } label: { Image(systemName: "star") }
-                .buttonStyle(.plain).help("Add the current folder").disabled(m.currentFolder == nil)
+            Button { m.toggleCurrentFavorite() } label: {
+                Image(systemName: m.currentIsFavorite ? "star.fill" : "star")
+                    .foregroundStyle(m.currentIsFavorite ? Color.yellow : .secondary)
+            }
+            .buttonStyle(.plain).disabled(m.currentFolder == nil)
+            .help(m.currentIsFavorite ? "Remove the current folder from favourites" : "Add the current folder to favourites")
         }) {
             List(m.favorites, id: \.self) { u in
                 Label(u.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"), systemImage: "folder.fill")

@@ -8,6 +8,7 @@ Newest first. Dates are when the change was made.
 
 ## Unreleased (since 1.5)
 
+- **Favorite folders**: the header star is filled when the folder on screen is a favourite, and a click removes it again.
 - **Hover tips** on nearly every control: status bar, panel headers, Develop / White Balance rows, filter rows, LUT cells, folder rows, Export and Settings.
 - **Folders**: the tree was empty when no drive or network share was mounted (the home folder was never listed); fixed, and ↻ lists it too if it hadn't been.
 
