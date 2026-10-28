@@ -257,8 +257,10 @@ extension ContentView {
                                      markBox: m.advancedSelection, onMark: { m.toggleMark(p.url) })
                                 .equatable()
                                 .id(p.url)
-                                .onTapGesture(count: 2) { m.open(p.url) }
+                                // the click acts at once; a double-tap handler in front of it made every click wait
+                                // the double-click interval (~0.3 s) to see whether a second one came
                                 .onTapGesture { m.click(p.url, command: NSEvent.modifierFlags.contains(.command), shift: NSEvent.modifierFlags.contains(.shift)) }
+                                .simultaneousGesture(TapGesture(count: 2).onEnded { m.open(p.url) })
                                 .contextMenu { photoMenu(p.url) }
                         }
                     }

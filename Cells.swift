@@ -146,12 +146,17 @@ struct MarkBox: View {
 
     var body: some View {
         if enabled && (isSelected || hovered) {
+            // a round badge with a white ring and a shadow: readable over a bright sky or a dark corner alike
             Button(action: onToggle) {
-                Image(systemName: isSelected ? "checkmark.square.fill" : "square")
-                    .font(.system(size: 14)).foregroundStyle(isSelected ? Color.accentColor : .white)
-                    .background(Color.black.opacity(0.35).clipShape(RoundedRectangle(cornerRadius: 3)))
+                Circle().fill(isSelected ? Color.accentColor : Color.black.opacity(0.35))
+                    .overlay(Circle().stroke(Color.white, lineWidth: 1.5))
+                    .overlay(Image(systemName: "checkmark").font(.system(size: 10, weight: .heavy)).foregroundStyle(.white)
+                        .opacity(isSelected ? 1 : 0))
+                    .frame(width: 20, height: 20)
+                    .shadow(color: .black.opacity(0.5), radius: 2, y: 1)
+                    .frame(width: 28, height: 28).contentShape(Rectangle())        // a fingertip-sized target
             }
-            .buttonStyle(.plain).padding(3)
+            .buttonStyle(.plain)
             .help(isSelected ? "Unmark" : "Mark for group operations")
         }
     }
