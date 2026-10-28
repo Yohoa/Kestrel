@@ -579,6 +579,7 @@ final class Model: ObservableObject {
         restoreBatchLooks()                          // the built-in ones now, LUTs again when their folder has loaded
         installKeyMonitor()
         LocalCache.trim()
+        ClipboardFiles.trim()
         undo.onApply = { [weak self] label, redo in
             self?.notify(.undoRedo, (redo ? "Redid " : "Undid ") + label, icon: redo ? "arrow.uturn.forward" : "arrow.uturn.backward")
         }
@@ -2794,14 +2795,16 @@ final class Model: ObservableObject {
         let dec = Decoded(url: url, adj: state(for: url).adjust, scale: 1)
         let name = url.deletingPathExtension().lastPathComponent
         let tiff = copyAsTIFF, q = Float(quality)
+        let fileName = "\(name)_\(look.fileName).\(tiff ? "tiff" : "heic")"
         status = "Rendering \(name) for the clipboard…"
         Task.detached(priority: .userInitiated) { [weak self] in
             // HEIC: the same 10-bit file Export writes; TIFF: 8-bit RGB without the alpha channel nobody uses
-            var data: Data?, size = CGSize.zero
+            var data: Data?, size = CGSize.zero, file: URL?
             if let img = dec.render(look) {
                 size = img.extent.size
                 data = tiff ? Engine.tiffRGB(img, look) : try? Engine.heic10(img, look, quality: q)
             }
+            if let data { file = ClipboardFiles.write(data, name: fileName) }
             await MainActor.run {
                 guard let self else { return }
                 guard let data else {
@@ -2809,17 +2812,20 @@ final class Model: ObservableObject {
                     self.notify(.copyPhoto, self.status, icon: "exclamationmark.triangle")
                     return
                 }
+                // The file as well as the picture, as Finder's own copy has: Finder pastes the file, Mail and Messages
+                // attach it, image apps take the picture.
                 NSPasteboard.general.clearContents()
+                let item = NSPasteboardItem()
+                if let file { item.setString(file.absoluteString, forType: .fileURL) }
                 if tiff {
-                    NSPasteboard.general.setData(data, forType: .tiff)
+                    item.setData(data, forType: .tiff)
                 } else {
                     // An app that only takes TIFF would get macOS's own conversion of the 10-bit HEIC: 16-bit and
-                    // uncompressed, ~200 MB at 24 MP. It gets Kestrel's 8-bit compressed one instead, made on request.
-                    let item = NSPasteboardItem()
+                    // uncompressed, ~200 MB at 24 MP. It gets Kestrel's 8-bit one instead, made on request.
                     item.setData(data, forType: NSPasteboard.PasteboardType(UTType.heic.identifier))
                     item.setDataProvider(ClipboardTIFF.shared.holding(data), forTypes: [.tiff])
-                    NSPasteboard.general.writeObjects([item])
                 }
+                NSPasteboard.general.writeObjects([item])
                 let dims = "\(Int(size.width)) × \(Int(size.height))", mb = String(format: "%.1f MB", Double(data.count) / 1e6)
                 self.status = "Copied the edited \(name) · \(look.title) (\(dims), \(tiff ? "TIFF" : "HEIC") \(mb)) to the clipboard"
                 self.notify(.copyPhoto, "Edited photo copied · \(look.title) · \(dims) · \(tiff ? "TIFF" : "HEIC") \(mb)", icon: "doc.on.doc")

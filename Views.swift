@@ -211,7 +211,7 @@ struct SettingsView: View {
                     Text("HEIC (small; default)").tag(false)
                     Text("TIFF (lossless, larger)").tag(true)
                 }
-                .help("HEIC: 10-bit, a few MB at the HEIC quality above. TIFF: 8-bit and lossless, ~25 MB or more for 24 MP. With HEIC, an app that only takes TIFF still gets an 8-bit TIFF, made when it pastes.")
+                .help("HEIC: 10-bit, a few MB at the HEIC quality above. TIFF: 8-bit and lossless, ~25 MB or more for 24 MP. With HEIC, an app that only takes TIFF still gets an 8-bit TIFF, made when it pastes. The file is on the clipboard too: Finder pastes it, Mail attaches it.")
             }
         }
         .formStyle(.grouped)

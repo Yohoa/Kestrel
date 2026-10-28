@@ -175,3 +175,41 @@ enum LocalCache {
         }
     }
 }
+
+/// The files ⌘C puts on the clipboard next to the picture, so Finder pastes a real file and Mail / Messages attach
+/// one. Each copy gets its own folder (the file keeps the photo's name). A copy has to outlive the paste, so old ones
+/// go only at launch: everything older than a day, and the oldest beyond 300 MB.
+enum ClipboardFiles {
+    static let dir = LocalCache.dir.appendingPathComponent("Clipboard", isDirectory: true)
+    static let limit = 300 << 20
+
+    static func write(_ data: Data, name: String) -> URL? {
+        let d = dir.appendingPathComponent(String(UUID().uuidString.prefix(8)), isDirectory: true)
+        let f = d.appendingPathComponent(name)
+        do {
+            try FileManager.default.createDirectory(at: d, withIntermediateDirectories: true)
+            try data.write(to: f, options: .atomic)
+            return f
+        } catch { return nil }
+    }
+
+    static func trim() {
+        DispatchQueue.global(qos: .background).async {
+            let fm = FileManager.default
+            let keys: [URLResourceKey] = [.contentModificationDateKey, .totalFileAllocatedSizeKey]
+            var copies: [(URL, Date, Int)] = []
+            for d in (try? fm.contentsOfDirectory(at: dir, includingPropertiesForKeys: keys)) ?? [] {
+                let date = (try? d.resourceValues(forKeys: [.contentModificationDateKey]))?.contentModificationDate ?? .distantPast
+                let size = ((try? fm.contentsOfDirectory(at: d, includingPropertiesForKeys: keys)) ?? [])
+                    .reduce(0) { $0 + ((try? $1.resourceValues(forKeys: [.totalFileAllocatedSizeKey]))?.totalFileAllocatedSize ?? 0) }
+                copies.append((d, date, size))
+            }
+            var total = copies.reduce(0) { $0 + $1.2 }
+            let dayAgo = Date().addingTimeInterval(-86_400)
+            for (d, date, size) in copies.sorted(by: { $0.1 < $1.1 }) where date < dayAgo || total > limit {
+                try? fm.removeItem(at: d)
+                total -= size
+            }
+        }
+    }
+}
