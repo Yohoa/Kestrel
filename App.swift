@@ -1300,6 +1300,21 @@ final class Model: ObservableObject {
     private var autoSelected: URL?                // what was selected for the user; replaced by `restoreName` if it turns up
 
     func load(_ urls: [URL], recursive: Bool? = nil) {
+        // a folder on a network share that went away: connect it first (once), then open the folder where it is now
+        if let u = urls.first(where: { NetworkMount.missing($0) != nil }), let (root, server) = NetworkMount.missing(u) {
+            let name = (root as NSString).lastPathComponent
+            status = "Connecting to “\(name)”…"
+            NetworkMount.mount(server) { [weak self] point in
+                guard let self else { return }
+                guard let point else {
+                    self.status = "Couldn't connect to “\(name)”. Check that the server is on, then try again."
+                    self.notify(.foldersRefreshed, self.status, icon: "network.slash")
+                    return
+                }
+                self.load(urls.map { $0.path.hasPrefix(root) ? NetworkMount.moved($0, from: root, to: point) : $0 }, recursive: recursive)
+            }
+            return
+        }
         flushSettings()
         loadTask?.cancel()
         scanTask?.cancel()                          // stop the old walk too, not just ignore its result

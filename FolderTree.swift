@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import ImageIO
 import UniformTypeIdentifiers
+import NetFS
 
 @MainActor
 final class FolderNode: ObservableObject, Identifiable, Hashable {
@@ -80,14 +81,17 @@ final class FolderVolumes: ObservableObject {
 
     func refresh() {
         DispatchQueue.global(qos: .utility).async {
-            let keys: [URLResourceKey] = [.volumeIsLocalKey, .volumeIsRootFileSystemKey, .volumeIsBrowsableKey]
+            let keys: [URLResourceKey] = [.volumeIsLocalKey, .volumeIsRootFileSystemKey, .volumeIsBrowsableKey, .volumeURLForRemountingKey]
             let urls = FileManager.default.mountedVolumeURLs(includingResourceValuesForKeys: keys, options: [.skipHiddenVolumes]) ?? []
             var vols: [URL] = [], net: Set<URL> = []
             for u in urls {
                 let v = try? u.resourceValues(forKeys: Set(keys))
                 if v?.volumeIsRootFileSystem == true || v?.volumeIsBrowsable == false { continue }
                 vols.append(u.standardizedFileURL)
-                if v?.volumeIsLocal == false { net.insert(u.standardizedFileURL) }
+                if v?.volumeIsLocal == false {
+                    net.insert(u.standardizedFileURL)
+                    if let r = v?.volumeURLForRemounting { NetworkMount.remember(r, at: u.standardizedFileURL.path) }
+                }
             }
             vols.sort { $0.lastPathComponent.localizedStandardCompare($1.lastPathComponent) == .orderedAscending }
             DispatchQueue.main.async {
@@ -98,6 +102,49 @@ final class FolderVolumes: ObservableObject {
                 }
             }
         }
+    }
+}
+
+/// Network shares that went away (sleep, Wi-Fi change, a restart) are connected again on their own when a folder on
+/// one is opened, the way Finder would if you clicked the server: the server address of every share seen mounted is
+/// remembered (without a password; the keychain has that), and macOS asks for a password only if it has none.
+enum NetworkMount {
+    private static let key = "networkVolumes"          // "/Volumes/Name" -> "smb://user@server/share"
+
+    static func remember(_ server: URL, at mountPoint: String) {
+        var c = URLComponents(url: server, resolvingAgainstBaseURL: false)
+        c?.password = nil
+        guard let s = c?.url?.absoluteString else { return }
+        var all = UserDefaults.standard.dictionary(forKey: key) as? [String: String] ?? [:]
+        if all[mountPoint] != s { all[mountPoint] = s; UserDefaults.standard.set(all, forKey: key) }
+    }
+
+    /// "/Volumes/Name" of a path on a volume, and the server it was mounted from, when that volume is not mounted now.
+    static func missing(_ url: URL) -> (root: String, server: URL)? {
+        let parts = url.standardizedFileURL.path.split(separator: "/", omittingEmptySubsequences: true)
+        guard parts.count >= 2, parts[0] == "Volumes" else { return nil }
+        let root = "/Volumes/" + parts[1]
+        guard !FileManager.default.fileExists(atPath: root),
+              let s = (UserDefaults.standard.dictionary(forKey: key) as? [String: String])?[root], let server = URL(string: s) else { return nil }
+        return (root, server)
+    }
+
+    /// Mounts the share (no Finder window); `done` gets where it was mounted, nil if it could not be.
+    static func mount(_ server: URL, _ done: @escaping @MainActor (String?) -> Void) {
+        let open = NSMutableDictionary()
+        open["UIOption"] = "AllowUI"                     // kNAUIOptionKey / kNAUIOptionAllowUI: a password prompt if needed
+        var request: AsyncRequestID?
+        let r = NetFSMountURLAsync(server as CFURL, nil, nil, nil, open, nil, &request, .main) { status, _, points in
+            let first = (points as? [String])?.first
+            MainActor.assumeIsolated { done(status == 0 || status == EEXIST ? first : nil) }   // EEXIST: it was mounted already
+        }
+        if r != 0 { DispatchQueue.main.async { MainActor.assumeIsolated { done(nil) } } }
+    }
+
+    /// The same folder under the place the share was mounted this time (usually the same "/Volumes/Name").
+    static func moved(_ url: URL, from root: String, to point: String) -> URL {
+        let p = url.standardizedFileURL.path
+        return URL(fileURLWithPath: point + p.dropFirst(root.count))
     }
 }
 
@@ -216,6 +263,8 @@ final class FolderReach: ObservableObject {
     @Published private(set) var unreachable: Set<URL> = []
     /// The row that was just clicked but could not be opened: it says so for a moment.
     @Published private(set) var flashing: URL?
+    /// The row whose network drive is being connected.
+    @Published private(set) var connecting: URL?
     private var flashWork: DispatchWorkItem?
 
     private init() {
@@ -237,6 +286,21 @@ final class FolderReach: ObservableObject {
 
     /// Opens the folder if it can be reached, else flashes the row.
     func open(_ u: URL, _ load: @escaping (URL) -> Void) {
+        guard connecting == nil else { return }
+        if let (root, server) = NetworkMount.missing(u) {
+            withAnimation(.easeOut(duration: 0.15)) { connecting = u }
+            NetworkMount.mount(server) { [weak self] point in
+                guard let self else { return }
+                withAnimation(.easeIn(duration: 0.2)) { self.connecting = nil }
+                guard let point else { self.set(u, false); self.flash(u); return }
+                let there = NetworkMount.moved(u, from: root, to: point)
+                self.probe(there) { [weak self] ok in
+                    self?.set(u, ok)
+                    if ok { load(there) } else { self?.flash(u) }
+                }
+            }
+            return
+        }
         probe(u) { [weak self] ok in
             guard let self else { return }
             set(u, ok)

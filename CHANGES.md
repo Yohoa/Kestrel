@@ -8,6 +8,7 @@ Newest first. Dates are when the change was made.
 
 ## Unreleased (since 1.5.2)
 
+- **Network drives connect again on their own**: opening a folder on a share that went away (a favourite, History, the last folder at launch, a drop) connects the share first, with no Finder window, using the server address remembered from when it was last mounted and the keychain password (macOS asks only if it has none). The favourite row says "Connecting…" meanwhile.
 - **Favorite folders** that can't be reached (a network drive not connected, a drive unplugged, a folder moved) are greyed with an orange sign; clicking one says "Not connected" (or "Folder not found") in the row for a moment instead of opening nothing. Checked in the background (2 s limit), again on every mount / unmount and on each click.
 - **⌘C copies the edited photo as HEIC** by default: 10-bit, a few MB (4.3 MB for a 24 MP photo) instead of a ~96 MB TIFF. Settings ▸ Export ▸ "⌘C copies the edited photo as" chooses HEIC (default), JPG (8-bit, opens anywhere) or TIFF (lossless, now without the unused alpha channel).
 - **⌘C also puts the file on the clipboard** (`<photo>_<look>.heic`, kept in ~/Library/Caches/Kestrel/Clipboard): pasting in Finder makes a real file, Mail and Messages attach it, image apps take the picture. Copies older than a day (or beyond 300 MB) are cleared at launch.

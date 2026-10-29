@@ -91,13 +91,16 @@ extension ContentView {
     /// A favourite that can't be reached (a share not connected, a drive unplugged) is greyed with a warning sign;
     /// clicking it says so in the row for a moment instead of opening an empty folder.
     func favoriteRow(_ u: URL, reach: FolderReach) -> some View {
-        let off = reach.unreachable.contains(u), flash = reach.flashing == u
+        let off = reach.unreachable.contains(u), flash = reach.flashing == u, busy = reach.connecting == u
         let network = u.path.hasPrefix("/Volumes/")
         return HStack(spacing: 6) {
             Image(systemName: off ? (network ? "network.slash" : "folder.badge.questionmark") : "folder.fill")
                 .foregroundStyle(off ? Color.orange : Color.accentColor)
                 .frame(width: 18)
-            if flash {
+            if busy {
+                ProgressView().controlSize(.mini)
+                Text("Connecting…").foregroundStyle(.secondary).lineLimit(1)
+            } else if flash {
                 Text(network ? "Not connected" : "Folder not found")
                     .foregroundStyle(.orange).lineLimit(1).truncationMode(.tail)
                     .transition(.opacity)
@@ -111,7 +114,7 @@ extension ContentView {
         .padding(.vertical, 1)
         .background(RoundedRectangle(cornerRadius: 4).fill(flash ? Color.orange.opacity(0.18) : .clear))
         .contentShape(Rectangle())
-        .help(off ? (network ? "Can't access \(u.path): the network drive is not connected. Connect it in Finder, then click again."
+        .help(off ? (network ? "Can't access \(u.path) right now. A click connects the network drive again (it asks for the password only if the keychain has none)."
                              : "Can't access \(u.path): the folder was moved, renamed or its drive unplugged.") + " Right-click to remove"
                   : "Click to open \(u.path). Right-click to remove")
         .onTapGesture { FolderReach.shared.open(u) { m.load([$0]) } }
