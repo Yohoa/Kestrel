@@ -10,6 +10,7 @@ Newest first. Dates are when the change was made.
 
 - **Splitters**: the gaps beside the side columns are as narrow as the window's edge (3 pt instead of 8), while the handle in them is wider than it looks (18 pt, reaching into the picture side) for a finger or a Pencil. Two fingers on a trackpad, or a finger on an iPad as a Sidecar display, drag a handle too.
 - **A handle above the filmstrip**: drag it to make the filmstrip taller or shorter (remembered); double-click for the usual height. The thumbnails grow and shrink with it, and are read sharper (760 px instead of 360) so a tall strip and large grid cells stay crisp.
+- **Notices** have a solid frosted backing (clear glass let a bright photo or the LUT thumbnails show through the words), and the "27 LUTs loaded" notice no longer appears at every launch.
 - The **floating side column** (pointing at a folded side) has the same rounded corners as the picture and the panels.
 - The status bar is a little lower (34 pt instead of 40).
 - **Stars in the status bar can be dragged**: drag along them to set the rating where you let go, or off the left end of the first star to clear it (no stars). A click still sets that many.
