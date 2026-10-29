@@ -218,20 +218,25 @@ extension ContentView {
         }
     }
 
+    /// Auto EV on its own (this photo, ⇧A); the rest of it — the selection, every shown photo, the metering mode —
+    /// in the small menu beside it.
     @ViewBuilder func developMenus(compact: Bool) -> some View {
-        Menu("Auto EV") {
-            Button("This photo") { m.autoExposure(scope: m.current.map { [$0] } ?? []) }
-            Button("Selection (\(m.selection.count))") { m.autoExposure(scope: m.actionTargets()) }.disabled(!m.hasGroup)
-            Button("Every shown photo") { m.autoExposure(scope: m.files) }
-            Divider()
-            Menu("Metering: \(m.meteringMode.title)") {
-                ForEach(MeteringMode.allCases) { mode in
-                    Button { m.meteringMode = mode } label: { Text((m.meteringMode == mode ? "✓ " : "    ") + mode.title) }
+        HStack(spacing: 2) {
+            Button("Auto EV") { m.autoExposure(scope: m.current.map { [$0] } ?? []) }
+                .fixedSize()
+                .help("Meter this photo's exposure automatically (⇧A), with \(m.meteringMode.title) metering")
+            Menu {
+                Button("Selection (\(m.selection.count))") { m.autoExposure(scope: m.actionTargets()) }.disabled(!m.hasGroup)
+                Button("Every shown photo") { m.autoExposure(scope: m.files) }
+                Divider()
+                Picker("Metering", selection: $m.meteringMode) {
+                    ForEach(MeteringMode.allCases) { Text($0.title).tag($0) }
                 }
-            }
+            } label: { Image(systemName: "chevron.down").font(.system(size: 9, weight: .semibold)) }
+            .menuStyle(.borderlessButton).menuIndicator(.hidden).fixedSize()
+            .help("Auto EV for the selection or every shown photo, and the metering mode")
         }
-        .fixedSize().disabled(m.current == nil)
-        .help("Meter the exposure automatically (⇧A), for this photo, the selection or every shown photo")
+        .disabled(m.current == nil)
         Menu(m.hasGroup ? "Apply to… (\(m.selection.count))" : "Apply to…") {
             Button("Selection (\(m.selection.count))") { m.applyCurrentSettings(to: m.actionTargets()) }.disabled(!m.hasGroup)
             Button("Every shown photo (\(m.files.count))") { m.applyCurrentSettings(to: m.files) }

@@ -67,8 +67,9 @@ extension ContentView {
             VStack(alignment: .leading, spacing: 8) {
                 // Each row falls back to a narrower arrangement in a narrow column instead of overflowing it.
                 ViewThatFits(in: .horizontal) {
-                    HStack { wbPresetMenu; pickNeutral(label: true); Spacer(); wbAsShot }
-                    HStack { wbPresetMenu; pickNeutral(label: false); Spacer(); wbAsShot }
+                    HStack { autoWBButton; wbPresetMenu; pickNeutral(label: true); Spacer(); wbAsShot }
+                    HStack { autoWBButton; wbPresetMenu; pickNeutral(label: false); Spacer(); wbAsShot }
+                    HStack(spacing: 4) { autoWBButton; wbPresetMenu; pickNeutral(label: false); Spacer(); wbAsShot }
                 }
                 ViewThatFits(in: .horizontal) {
                     HStack { wbTempField(70); wbTintField(56) }
@@ -83,9 +84,16 @@ extension ContentView {
         }
     }
 
+    /// Auto white balance on its own; the presets stay in the menu beside it.
+    var autoWBButton: some View {
+        Button("Auto WB") { m.applyAutoWB() }
+            .fixedSize().disabled(m.current == nil)
+            .help("Make the picture's average neutral (grey world), for this photo")
+    }
+
     var wbPresetMenu: some View {
         Menu(m.wbIsCustom ? "Custom" : "As shot") {
-            ForEach(WBPreset.all) { p in Button(p.name) { m.applyWBPreset(p) } }
+            ForEach(WBPreset.all.filter { $0.temp != -1 }) { p in Button(p.name) { m.applyWBPreset(p) } }   // Auto: its own button
         }
         .fixedSize()
         .help("White balance presets (W switches As Shot → Daylight → Auto → Custom)")

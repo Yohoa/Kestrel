@@ -10,7 +10,7 @@ import SwiftUI
 enum Shortcuts {
     static let groups: [(title: String, items: [(keys: String, text: String)])] = [
         ("Navigate", [
-            ("← →  Space  ⇧Space", "Previous / next photo (follows the filter)"),
+            ("← →  Space  ⇧Space", "Previous / next photo (follows the filter); in the grid Space marks / unmarks the photo, like ⌘-click"),
             ("Swipe, flick", "Two fingers sideways, or a quick sideways drag, on the photo: previous / next"),
             ("Home  End", "First / last photo"),
             ("↑ ↓", "One row up / down in the grid"),
@@ -155,7 +155,10 @@ extension Model {
             if shift { extendSelection(d) } else { step(d) }; return true
         case 115: goFirst(); return true                                  // Home
         case 119: goLast(); return true                                   // End
-        case 49: step(shift ? -1 : 1); return true                        // Space / ⇧Space (FRV)
+        case 49:                                                          // Space / ⇧Space
+            // grid: Space marks / unmarks the current photo, as ⌘-click does; single view: next / previous (FRV)
+            if viewMode == .grid, !shift, let c = current { click(c, command: true, shift: false) } else { step(shift ? -1 : 1) }
+            return true
         case 48: toggleHideAllPanels(); return true                       // Tab (FRV)
         case 36, 76: if viewMode == .grid, let c = current { open(c); return true }; return false   // Return
         case 122: sheet = .help; return true                              // F1
