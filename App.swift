@@ -108,6 +108,8 @@ final class StatusState: ObservableObject {
 final class FolderTreeState: ObservableObject {
     @Published var expanded: Set<String> = []
     @Published var current: String?
+    /// The folder being opened: its row shows a spinner until the first photos are listed.
+    @Published var loading: String?
     @Published var includeSubfolders = UserDefaults.standard.bool(forKey: "includeSubfolders")
 }
 
@@ -143,7 +145,7 @@ final class Model: ObservableObject {
         }
     }
     @Published var currentFolder: URL? {
-        didSet { folderTree.current = currentFolder?.standardizedFileURL.path; revealInTree(currentFolder) }
+        didSet { folderTree.current = currentFolder?.pathKey; revealInTree(currentFolder) }
     }
     /// What the folder tree rows show; kept apart so the rows don't redraw on every change of the model.
     let folderTree = FolderTreeState()
@@ -194,12 +196,12 @@ final class Model: ObservableObject {
         guard !FileManager.default.fileExists(atPath: new.path) else { return fail("“\(name)” already exists there") }
         // Everything that pointed into the old path, worked out now: standardizing a path (/private/tmp → /tmp,
         // symlinks) only gives the same answer while the old path still exists.
-        let o = old.path, n = new.standardizedFileURL.path
+        let o = old.pathKey, n = new.pathKey
         func moved(_ p: String) -> String? { p == o ? n : p.hasPrefix(o + "/") ? n + p.dropFirst(o.count) : nil }
-        func moved(_ u: URL) -> URL { moved(u.standardizedFileURL.path).map { URL(fileURLWithPath: $0) } ?? u }
+        func moved(_ u: URL) -> URL { moved(u.pathKey).map { URL(fileURLWithPath: $0, isDirectory: true) } ?? u }
         let expanded = Set(expandedFolders.map { moved($0) ?? $0 })
         let favs = favorites.map(moved), recent = recentInputs.map(moved)
-        let browsing = currentFolder.flatMap { moved($0.standardizedFileURL.path) }.map { URL(fileURLWithPath: $0) }
+        let browsing = currentFolder.flatMap { moved($0.pathKey) }.map { URL(fileURLWithPath: $0, isDirectory: true) }
 
         flushSettings()
         SidecarWriter.shared.runSync {}                  // sidecar writes for photos in there land first
@@ -237,7 +239,8 @@ final class Model: ObservableObject {
 
     /// Unfolds the folder tree down to `folder` (its parent folders; the folder itself stays as the user left it).
     func revealInTree(_ folder: URL?) {
-        guard var u = folder?.standardizedFileURL.deletingLastPathComponent() else { return }
+        guard let f = folder else { return }
+        var u = URL(fileURLWithPath: f.pathKey, isDirectory: true).deletingLastPathComponent()
         var add: [String] = []
         while u.path != "/" && !u.path.isEmpty {
             add.append(u.path)
@@ -477,7 +480,7 @@ final class Model: ObservableObject {
     @Published var quality = UserDefaults.standard.object(forKey: "exportQuality") as? Double ?? 0.85 {
         didSet { UserDefaults.standard.set(quality, forKey: "exportQuality") }
     }
-    @Published var customOut: URL? = UserDefaults.standard.string(forKey: "exportFolder").map { URL(fileURLWithPath: $0) } {
+    @Published var customOut: URL? = UserDefaults.standard.string(forKey: "exportFolder").map { URL(fileURLWithPath: $0, isDirectory: true) } {
         didSet { UserDefaults.standard.set(customOut?.path, forKey: "exportFolder") }
     }
     @Published var outputMode = OutputMode(rawValue: UserDefaults.standard.string(forKey: "exportMode") ?? "") ?? .subfolder {
@@ -602,8 +605,13 @@ final class Model: ObservableObject {
         detachedPanels = []
         if !torn.isEmpty { DispatchQueue.main.async { [weak self] in torn.forEach { self?.detach($0) } } }
         if openLastFolder, let paths = UserDefaults.standard.stringArray(forKey: Self.lastOpenedKey) {
-            let urls = paths.map { URL(fileURLWithPath: $0) }.filter { FileManager.default.fileExists(atPath: $0.path) }
-            if !urls.isEmpty { DispatchQueue.main.async { [weak self] in self?.load(urls) } }
+            // checked off the main thread (on a share each check is a round trip); a share that went away is
+            // connected again by load()
+            let urls = paths.map { URL(fileURLWithPath: $0, isDirectory: !Model.isPhotoFile($0)) }
+            DispatchQueue.global(qos: .userInitiated).async { [weak self] in
+                let there = urls.filter { NetworkMountCheck.onMissingVolume($0) || FileManager.default.fileExists(atPath: $0.path) }
+                DispatchQueue.main.async { MainActor.assumeIsolated { if !there.isEmpty { self?.load(there) } } }
+            }
         }
     }
 
@@ -1246,10 +1254,10 @@ final class Model: ObservableObject {
                     while let last = inside.last, parent != last, !parent.hasPrefix(last + "/") {
                         let done = inside.removeLast()
                         flushJPGs(done)
-                        index.folderListed(URL(fileURLWithPath: done))
+                        index.folderListed(URL(fileURLWithPath: done, isDirectory: true))
                     }
                 }
-                defer { for d in inside { flushJPGs(d); index.folderListed(URL(fileURLWithPath: d)) } }
+                defer { for d in inside { flushJPGs(d); index.folderListed(URL(fileURLWithPath: d, isDirectory: true)) } }
                 while let f = e?.nextObject() as? URL {
                     if Task.isCancelled { return r }
                     leaveFolders(for: f)
@@ -1285,6 +1293,12 @@ final class Model: ObservableObject {
 
     /// ".raw" is also what disk images, audio and texture dumps are called; only the old Panasonic / Leica cameras'
     /// files (a TIFF variant starting "IIU\0") are photos. One 4-byte read per .raw file.
+    /// A photo file (by its extension) rather than a folder.
+    nonisolated static func isPhotoFile(_ path: String) -> Bool {
+        let ext = (path as NSString).pathExtension.lowercased()
+        return rawExtensions.contains(ext) || bitmapExtensions.contains(ext)
+    }
+
     nonisolated static func isPanasonicRAW(_ url: URL) -> Bool {
         guard let h = try? FileHandle(forReadingFrom: url) else { return false }
         defer { try? h.close() }
@@ -1304,9 +1318,11 @@ final class Model: ObservableObject {
         if let u = urls.first(where: { NetworkMount.missing($0) != nil }), let (root, server) = NetworkMount.missing(u) {
             let name = (root as NSString).lastPathComponent
             status = "Connecting to “\(name)”…"
+            folderTree.loading = u.pathKey
             NetworkMount.mount(server) { [weak self] point in
                 guard let self else { return }
                 guard let point else {
+                    self.folderTree.loading = nil
                     self.status = "Couldn't connect to “\(name)”. Check that the server is on, then try again."
                     self.notify(.foldersRefreshed, self.status, icon: "network.slash")
                     return
@@ -1322,6 +1338,7 @@ final class Model: ObservableObject {
         let rec = recursive ?? includeSubfolders
         let depth = subfolderDepth
         status = "Loading…"
+        folderTree.loading = urls.first.map { Model.isPhotoFile($0.path) ? $0.deletingLastPathComponent().pathKey : $0.pathKey }
         loadSeq += 1
         let seq = loadSeq
         let walk = Task.detached(priority: .userInitiated) { [weak self] in
@@ -1334,6 +1351,7 @@ final class Model: ObservableObject {
             let scan = await walk.value
             guard !Task.isCancelled, let self, self.loadSeq == seq else { return }
             self.scanDoneSeq = seq
+            self.folderTree.loading = nil
             if self.streamedSeq == seq { self.finishStreaming(scan) } else { self.finishLoad(urls, scan, recursive: rec) }
         }
     }
@@ -1341,6 +1359,7 @@ final class Model: ObservableObject {
     /// Part of a long scan: the first part opens the folder, later ones join the list.
     private func scanned(_ batch: [URL], urls: [URL], recursive rec: Bool, seq: Int) {
         guard seq == loadSeq, scanDoneSeq != seq else { return }     // the final result has everything anyway
+        folderTree.loading = nil                                     // photos are showing
         if streamedSeq != seq {
             streamedSeq = seq
             finishLoad(urls, ScanResult(photos: Set(batch).sorted(by: Model.pathOrder).map { Photo(url: $0) }), recursive: rec, streaming: true)
@@ -1418,9 +1437,8 @@ final class Model: ObservableObject {
         undo.clear()
 
         if let first = urls.first {
-            var isDir: ObjCBool = false
-            FileManager.default.fileExists(atPath: first.path, isDirectory: &isDir)
-            currentFolder = isDir.boolValue ? first : first.deletingLastPathComponent()
+            // from the name, not a stat on the main thread (a round trip on a share)
+            currentFolder = Model.isPhotoFile(first.path) ? first.deletingLastPathComponent() : first
         }
         if !found.isEmpty {
             remember(&recentInputs, Self.inputsKey, urls)
@@ -1679,6 +1697,23 @@ final class Model: ObservableObject {
     /// Reads the sidecars of targets the background reader hasn't reached, so "before" values (undo, toggles) are real.
     /// Reads now (on the main thread) whatever of `urls` the background reader hasn't reached; for actions that
     /// use a photo's saved settings and can't wait.
+    /// Like `ensureRead`, but a photo the reader hasn't reached is read off the main thread (on a share that is a
+    /// round trip or more), then `then` runs. Already read: `then` runs at once.
+    func afterRead(_ urls: [URL], _ then: @escaping () -> Void) {
+        let unread = urls.filter { u in libIndex[u].map { !library[$0].metadataRead } ?? false }
+        guard !unread.isEmpty else { then(); return }
+        Model.io.async { [weak self] in
+            let md = unread.map { ($0, PhotoMetadata.read($0)) }
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    self.applyMetadata(md.filter { u, _ in self.libIndex[u].map { !self.library[$0].metadataRead } ?? false }, reselect: false)
+                    then()
+                }
+            }
+        }
+    }
+
     func ensureRead(_ urls: [URL]) {
         let unread = urls.filter { u in libIndex[u].map { !library[$0].metadataRead } ?? false }
         guard !unread.isEmpty else { return }
@@ -1688,7 +1723,10 @@ final class Model: ObservableObject {
     func setRating(_ r: Int, on urls: [URL]? = nil) {
         let ts = urls ?? metadataTargets()
         guard !ts.isEmpty, !sidecarConflict(ts) else { return }
-        ensureRead(ts)
+        afterRead(ts) { [weak self] in self?.setRatingRead(r, ts) }
+    }
+
+    private func setRatingRead(_ r: Int, _ ts: [URL]) {
         var value = r
         if r < 0, ts.allSatisfy({ photo($0)?.rating == -1 }) { value = 0 }        // X again un-rejects
         let old = Dictionary(grouping: ts) { photo($0)?.rating ?? 0 }
@@ -1708,7 +1746,10 @@ final class Model: ObservableObject {
     func setLabel(_ name: String?, on urls: [URL]? = nil) {
         let ts = urls ?? metadataTargets()
         guard !ts.isEmpty, !sidecarConflict(ts) else { return }
-        ensureRead(ts)
+        afterRead(ts) { [weak self] in self?.setLabelRead(name, ts) }
+    }
+
+    private func setLabelRead(_ name: String?, _ ts: [URL]) {
         var value = name
         if let n = name, ts.allSatisfy({ photo($0)?.label == n }) { value = nil }   // same key again clears
         let old = Dictionary(grouping: ts) { photo($0)?.label ?? "" }
@@ -1735,12 +1776,17 @@ final class Model: ObservableObject {
         let ts = (targets ?? metadataTargets()).filter { libIndex[$0] != nil }
         guard !ts.isEmpty else { return }
         flushSettings()
-        SidecarWriter.shared.runSync {}                  // queued sidecar writes land before the files move
         status = "Moving \(ts.count) photo(s) to \(Self.rejectedFolderName)…"
-        Model.io.async {
-            let r = Model.moveFiles(ts) { $0.deletingLastPathComponent().appendingPathComponent(Model.rejectedFolderName, isDirectory: true) }
-            DispatchQueue.main.async { MainActor.assumeIsolated { self.rejectedMoved(r, recordUndo: recordUndo) } }
-        }
+        // on the sidecar queue, after the writes already queued (they land before the files move), never waiting
+        // for them on the main thread: on a share that wait froze the window
+        SidecarWriter.shared.submit({
+            Model.moveFiles(ts) { $0.deletingLastPathComponent().appendingPathComponent(Model.rejectedFolderName, isDirectory: true) }
+        }, completion: { [weak self] result in
+            MainActor.assumeIsolated {
+                guard let self, let r = try? result.get() else { return }
+                self.rejectedMoved(r, recordUndo: recordUndo)
+            }
+        })
     }
 
     struct MoveResult: Sendable {
@@ -1911,6 +1957,16 @@ final class Model: ObservableObject {
         metaSeq += 1
         let seq = metaSeq
         let after = then
+        // Shown at once (the star, the label, a reject hiding the photo); on a share the write takes a while.
+        // A file that could not be written gets its old value back.
+        var before: [URL: Photo] = [:]
+        for u in urls {
+            guard let i = libIndex[u] else { continue }
+            before[u] = library[i]
+            lastAppliedSeq[u] = seq
+            update(&library[i])
+        }
+        recomputeView()
         SidecarWriter.shared.submit({ () -> ([URL], [String]) in
             var ok: [URL] = [], errors: [String] = []
             for u in urls {
@@ -1922,13 +1978,11 @@ final class Model: ObservableObject {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 let (ok, errors) = (try? result.get()) ?? ([], ["write failed"])
-                for u in ok where (self.lastAppliedSeq[u] ?? 0) < seq {
-                    self.lastAppliedSeq[u] = seq
-                    if let i = self.libIndex[u] {
-                        update(&self.library[i])
-                    }
+                let failed = Set(urls).subtracting(ok)
+                for u in failed where self.lastAppliedSeq[u] == seq {          // not changed again since
+                    if let i = self.libIndex[u], let old = before[u] { self.library[i] = old }
                 }
-                self.recomputeView()
+                if !failed.isEmpty { self.recomputeView() }
                 if let c = self.current, ok.contains(c) { self.loadXMPPanel() }
                 if let e = errors.first {
                     self.status = "XMP write failed — \(e)" + (errors.count > 1 ? " (+\(errors.count - 1) more)" : "")
@@ -2050,7 +2104,9 @@ final class Model: ObservableObject {
     @Published var recentOutputs: [URL] = Model.loadHistory(Model.outputsKey)
 
     private static func loadHistory(_ key: String) -> [URL] {
-        (UserDefaults.standard.stringArray(forKey: key) ?? []).map { URL(fileURLWithPath: $0) }
+        // isDirectory given: without it each path is stat'ed to find out, a round trip per entry on a share (seconds
+        // at launch, longer for one that went away)
+        (UserDefaults.standard.stringArray(forKey: key) ?? []).map { URL(fileURLWithPath: $0, isDirectory: !isPhotoFile($0)) }
     }
 
     private func remember(_ list: inout [URL], _ key: String, _ new: [URL]) {
@@ -2077,14 +2133,14 @@ final class Model: ObservableObject {
 
     /// The folder on screen is a favourite (compared by path, so /private/tmp and /tmp or a trailing slash match).
     var currentIsFavorite: Bool {
-        guard let f = currentFolder?.standardizedFileURL.path else { return false }
-        return favorites.contains { $0.standardizedFileURL.path == f }
+        guard let f = currentFolder?.pathKey else { return false }
+        return favorites.contains { $0.pathKey == f }
     }
 
     /// The star in the Favorite folders header: adds the folder on screen, or removes it if it is one already.
     func toggleCurrentFavorite() {
-        guard let f = currentFolder?.standardizedFileURL.path else { return }
-        if currentIsFavorite { favorites.filter { $0.standardizedFileURL.path == f }.forEach(removeFavorite) } else { addFavorite() }
+        guard let f = currentFolder?.pathKey else { return }
+        if currentIsFavorite { favorites.filter { $0.pathKey == f }.forEach(removeFavorite) } else { addFavorite() }
     }
 
     func removeFavorite(_ u: URL) {

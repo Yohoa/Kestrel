@@ -65,7 +65,7 @@ extension ContentView {
 
     /// Brings the current folder into view once its ancestors have been expanded and laid out.
     func scrollTree(_ proxy: ScrollViewProxy) {
-        guard let f = m.currentFolder?.standardizedFileURL.path else { return }
+        guard let f = m.currentFolder?.pathKey else { return }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.15) { withAnimation { proxy.scrollTo(f, anchor: .center) } }
     }
 

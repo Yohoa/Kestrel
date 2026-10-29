@@ -354,3 +354,20 @@ enum LookMode: String, CaseIterable, Identifiable {
         }
     }
 }
+
+extension URL {
+    /// The path as the app compares folders: "." and ".." resolved, no trailing slash, and the system's /private
+    /// prefix dropped (/private/tmp is /tmp). Worked out from the text alone. `standardizedFileURL` gives the same
+    /// for most paths but asks the file system (a stat per call), which on a network share is a round trip each time:
+    /// called while drawing, it froze the window for seconds.
+    var pathKey: String {
+        var parts: [Substring] = []
+        for c in path.split(separator: "/", omittingEmptySubsequences: true) {
+            if c == "." { continue }
+            if c == ".." { if !parts.isEmpty { parts.removeLast() }; continue }
+            parts.append(c)
+        }
+        if parts.count >= 2, parts[0] == "private", ["tmp", "var", "etc"].contains(parts[1]) { parts.removeFirst() }
+        return "/" + parts.joined(separator: "/")
+    }
+}

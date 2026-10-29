@@ -121,10 +121,10 @@ enum NetworkMount {
 
     /// "/Volumes/Name" of a path on a volume, and the server it was mounted from, when that volume is not mounted now.
     static func missing(_ url: URL) -> (root: String, server: URL)? {
-        let parts = url.standardizedFileURL.path.split(separator: "/", omittingEmptySubsequences: true)
+        let parts = url.pathKey.split(separator: "/", omittingEmptySubsequences: true)
         guard parts.count >= 2, parts[0] == "Volumes" else { return nil }
         let root = "/Volumes/" + parts[1]
-        guard !FileManager.default.fileExists(atPath: root),
+        guard NetworkMountCheck.notMounted(root),
               let s = (UserDefaults.standard.dictionary(forKey: key) as? [String: String])?[root], let server = URL(string: s) else { return nil }
         return (root, server)
     }
@@ -143,8 +143,31 @@ enum NetworkMount {
 
     /// The same folder under the place the share was mounted this time (usually the same "/Volumes/Name").
     static func moved(_ url: URL, from root: String, to point: String) -> URL {
-        let p = url.standardizedFileURL.path
-        return URL(fileURLWithPath: point + p.dropFirst(root.count))
+        let p = url.pathKey
+        let q = point + p.dropFirst(root.count)
+        return URL(fileURLWithPath: q, isDirectory: !Model.isPhotoFile(q))
+    }
+}
+
+/// Whether a volume is mounted, from the system's mount table (local, instant), never by looking at the
+/// share itself — a stat on a mounted share's root is a network round trip, and on a share that dropped it can hang.
+enum NetworkMountCheck {
+    static func notMounted(_ root: String) -> Bool { !mountPoints().contains(root) }
+
+    /// A path on a /Volumes/… volume that is not mounted (load() connects it, so it counts as there).
+    static func onMissingVolume(_ url: URL) -> Bool {
+        let parts = url.pathKey.split(separator: "/", omittingEmptySubsequences: true)
+        guard parts.count >= 2, parts[0] == "Volumes" else { return false }
+        return notMounted("/Volumes/" + parts[1])
+    }
+
+    static func mountPoints() -> Set<String> {
+        var list: UnsafeMutablePointer<statfs>?
+        let n = getmntinfo(&list, MNT_NOWAIT)                 // the kernel's table; MNT_NOWAIT: never asks a server
+        guard n > 0, let list else { return [] }
+        return Set((0..<Int(n)).map { i in
+            withUnsafeBytes(of: list[i].f_mntonname) { String(cString: $0.bindMemory(to: CChar.self).baseAddress!) }
+        })
     }
 }
 
@@ -176,7 +199,7 @@ struct FolderTreeRow: View {
     @ObservedObject var node: FolderNode
     let depth: Int
 
-    var path: String { node.url.standardizedFileURL.path }
+    var path: String { node.url.pathKey }             // never standardizedFileURL here: a stat per row per redraw
 
     /// Volumes at the top level get a drive or network icon, everything else a folder.
     var icon: String {
@@ -204,6 +227,7 @@ struct FolderTreeRow: View {
                 }
                 Image(systemName: icon).foregroundStyle(isCurrent ? Color.accentColor : .secondary)
                 Text(node.url.lastPathComponent).lineLimit(1).truncationMode(.middle)
+                if tree.loading == path { ProgressView().controlSize(.mini).help("Opening…") }
                 if node.unreadable {
                     Image(systemName: "exclamationmark.triangle").font(.system(size: 9)).foregroundStyle(.yellow)
                         .help("Can't read this folder. For a network share, check that it is still connected and that Kestrel may access network volumes (System Settings › Privacy & Security › Files & Folders).")

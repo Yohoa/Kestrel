@@ -8,6 +8,9 @@ Newest first. Dates are when the change was made.
 
 ## Unreleased (since 1.5.2)
 
+- **No more freezes on network shares**: clicking a folder, stepping between photos, launching with History / Favourites on a share, rating, labelling and Move to _Rejected all stay responsive. Measured on SMB: a 6.7 s freeze while browsing and 6 s at launch are gone (steps 0–1 ms). Causes: paths were "standardised" while drawing (a file-system check per call, a network round trip each), history paths were turned into URLs with a check each, and Move to _Rejected waited on the main thread for pending sidecar writes.
+- Ratings, labels and rejects show at once; on a share the sidecar is written afterwards (the old value comes back if that fails). The folder being opened shows a spinner in Folders until its photos are listed.
+- The update window was too narrow for its four buttons, so their labels were cut short; it is wider now.
 - **Network drives connect again on their own**: opening a folder on a share that went away (a favourite, History, the last folder at launch, a drop) connects the share first, with no Finder window, using the server address remembered from when it was last mounted and the keychain password (macOS asks only if it has none). The favourite row says "Connecting…" meanwhile.
 - **Favorite folders** that can't be reached (a network drive not connected, a drive unplugged, a folder moved) are greyed with an orange sign; clicking one says "Not connected" (or "Folder not found") in the row for a moment instead of opening nothing. Checked in the background (2 s limit), again on every mount / unmount and on each click.
 - **⌘C copies the edited photo as HEIC** by default: 10-bit, a few MB (4.3 MB for a 24 MP photo) instead of a ~96 MB TIFF. Settings ▸ Export ▸ "⌘C copies the edited photo as" chooses HEIC (default), JPG (8-bit, opens anywhere) or TIFF (lossless, now without the unused alpha channel).
