@@ -8,7 +8,11 @@ import UniformTypeIdentifiers
 extension ContentView {
     // MARK: filmstrip (the mouse wheel scrolls it sideways)
 
-    var filmstrip: some View { FilmstripView(m: m, thumbs: thumbs, menu: { AnyView(photoMenu($0)) }) }
+    /// Everything but the thumbnail takes 48 pt of the strip's height (name, borders, margins): 128 → 80 pt pictures.
+    var filmstrip: some View {
+        FilmstripView(m: m, thumbs: thumbs, menu: { AnyView(photoMenu($0)) },
+                      imageHeight: CGFloat(m.layoutStore.filmstripHeight - 48).rounded())
+    }
 
     // MARK: status bar
 

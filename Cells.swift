@@ -59,6 +59,9 @@ final class ThumbStore: ObservableObject {
         }
     }
 
+    /// Sharp up to a tall filmstrip (320 pt: ~380 pt wide pictures, 760 px on a Retina screen) and large grid cells.
+    nonisolated static let maxPixels = 760
+
     nonisolated static func makeThumb(_ url: URL) -> NSImage? {
         let slow = Storage.isSlow(url)
         if slow {
@@ -70,7 +73,7 @@ final class ThumbStore: ObservableObject {
         let opts: [CFString: Any] = [
             kCGImageSourceCreateThumbnailFromImageIfAbsent: true,
             kCGImageSourceCreateThumbnailWithTransform: true,
-            kCGImageSourceThumbnailMaxPixelSize: 360,
+            kCGImageSourceThumbnailMaxPixelSize: ThumbStore.maxPixels,
         ]
         guard let cg = CGImageSourceCreateThumbnailAtIndex(src, 0, opts as CFDictionary) else { return nil }
         if slow { LocalCache.storeThumb(cg, for: url) }
@@ -525,14 +528,17 @@ struct FilmCell: View, Equatable {
     let store: ThumbStore                       // only to request the thumbnail and report the hover
     var markBox = false
     var showKind = false
+    /// The thumbnail's height; it follows the filmstrip's (the handle above it), at the camera's 7:5.
+    var imageHeight: CGFloat = 80
     var onMark: () -> Void = {}
 
     static func == (a: Self, b: Self) -> Bool {
         a.photo == b.photo && a.isCurrent == b.isCurrent && a.isSelected == b.isSelected && a.image === b.image
-            && a.hovered == b.hovered && a.markBox == b.markBox && a.showKind == b.showKind
+            && a.hovered == b.hovered && a.markBox == b.markBox && a.showKind == b.showKind && a.imageHeight == b.imageHeight
     }
 
     var body: some View {
+        let w = (imageHeight * 1.4).rounded(), h = imageHeight
         VStack(spacing: 2) {
             ZStack {
                 Group {
@@ -542,15 +548,15 @@ struct FilmCell: View, Equatable {
                         Color.gray.opacity(0.2)
                     }
                 }
-                .frame(width: 112, height: 80)
-                PhotoBadges(photo: photo, isSelected: isSelected, showKind: showKind).frame(width: 112, height: 80)
+                .frame(width: w, height: h)
+                PhotoBadges(photo: photo, isSelected: isSelected, showKind: showKind).frame(width: w, height: h)
                 MarkBox(photo: photo, isSelected: isSelected, enabled: markBox, onToggle: onMark, hovered: hovered)
-                    .frame(width: 112, height: 80, alignment: .topTrailing)
+                    .frame(width: w, height: h, alignment: .topTrailing)
             }
             .overlay(RoundedRectangle(cornerRadius: 3).stroke(isCurrent ? Color.accentColor : .clear, lineWidth: 2))   // current = border
-            Text(photo.name).font(.system(size: 10, design: .monospaced)).lineLimit(1)
+            Text(photo.name).font(.system(size: 10, design: .monospaced)).lineLimit(1).truncationMode(.middle)
         }
-        .frame(width: 116)
+        .frame(width: w + 4)
         .padding(2)
         .background(isSelected ? Color.accentColor.opacity(0.28) : (isCurrent ? Color.primary.opacity(0.10) : .clear))   // selected = background
         .onHover { inside in if markBox { if inside { store.hovered = photo.url } else if store.hovered == photo.url { store.hovered = nil } } }

@@ -192,9 +192,10 @@ struct ContentView: View {
 
     func peek(_ side: String, _ layout: LayoutStore, left: Bool, panels: [Panel]? = nil, inset: Double) -> some View {
         column(side, width: left ? layout.leftWidth : layout.rightWidth, panels: panels)
-            .padding(6)
-            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 16))
-            .overlay(RoundedRectangle(cornerRadius: 16).stroke(Color.primary.opacity(0.12)))
+            // the same corners as the picture's box and the panels (14), the panels as close to the edge as in a column
+            .padding(3)
+            .background(.regularMaterial, in: RoundedRectangle(cornerRadius: 14))
+            .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.primary.opacity(0.12)))
             .shadow(color: .black.opacity(0.28), radius: 18, x: left ? 6 : -6, y: 4)
             .padding(.vertical, 4)
             .padding(left ? .leading : .trailing, inset)
