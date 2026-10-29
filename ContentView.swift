@@ -99,7 +99,7 @@ struct ContentView: View {
         case .exif: return .fixed(174)                 // the seven lines without scrolling
         case .xmp: return .fixed(280)
         case .histogram: return .fixed(118)
-        case .stats: return .fixed(96)
+        case .stats: return .intrinsic                // its four rows: a fixed 96 pt cut the B row off
         case .develop: return .intrinsic
         case .whiteBalance: return .intrinsic
         case .filmstrip: return .fixed(128)

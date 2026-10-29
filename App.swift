@@ -532,7 +532,8 @@ final class Model: ObservableObject {
     }
 
     // Layout
-    @Published var hiddenPanels: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "hiddenPanels") ?? []) {
+    /// Exposure Stats starts hidden (the histogram says most of it; Panels menu or F4 shows it).
+    @Published var hiddenPanels: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "hiddenPanels") ?? [Panel.stats.rawValue]) {
         didSet { UserDefaults.standard.set(Array(hiddenPanels), forKey: "hiddenPanels") }
     }
     @Published var lutColumns = max(2, min(3, UserDefaults.standard.integer(forKey: "lutColumns") == 0 ? 3 : UserDefaults.standard.integer(forKey: "lutColumns"))) {
@@ -720,7 +721,7 @@ final class Model: ObservableObject {
 
     func resetLayout() {
         layout = Self.defaultLayout
-        hiddenPanels = hiddenPanels.filter { $0 == Panel.filmstrip.rawValue }
+        hiddenPanels = hiddenPanels.filter { $0 == Panel.filmstrip.rawValue }.union([Panel.stats.rawValue])   // the defaults
         for k in Array(panelWindows.keys) { panelWindows[k]?.close() }
         saveLayout()
     }
