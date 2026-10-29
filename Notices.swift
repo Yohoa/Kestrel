@@ -98,7 +98,11 @@ struct NoticeView: View {
                 .font(.system(size: place == .picture ? 12 : 11, weight: .medium))
                 .lineLimit(2).truncationMode(.middle).multilineTextAlignment(.center)
                 .padding(.horizontal, 12).padding(.vertical, 6)
-                .glassCapsule()
+                // a solid frosted backing, not clear glass: over a bright photo or the LUT thumbnails clear glass
+                // let the picture through and the words could hardly be read
+                .background(.thickMaterial, in: Capsule())
+                .overlay(Capsule().stroke(Color.primary.opacity(0.12)))
+                .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
                 .padding(8)
                 .transition(.opacity.combined(with: .move(edge: place == .picture ? .bottom : .top)))
                 .allowsHitTesting(false)

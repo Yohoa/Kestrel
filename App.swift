@@ -2307,7 +2307,7 @@ final class Model: ObservableObject {
         if !added.isEmpty {
             notify(.lutsLoaded, added.count == 1 ? "New LUT: \(added[0])" : "\(added.count) new LUTs: " + added.prefix(3).joined(separator: ", ") + (added.count > 3 ? "…" : ""),
                    icon: "plus.circle.fill")
-        } else if before == nil {
+        } else if before == nil, folder.pathKey != Self.builtInLUTFolder?.pathKey {      // the built-in ones: same every launch
             notify(.lutsLoaded, "\(scan.looks.count) LUTs loaded from \(folder.lastPathComponent)" + (scan.skipped.isEmpty ? "" : " · \(scan.skipped.count) skipped"),
                    icon: "square.grid.3x3")
         } else if !scan.skipped.isEmpty {
