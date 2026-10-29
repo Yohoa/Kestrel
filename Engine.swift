@@ -356,7 +356,7 @@ enum Engine {
         ctx.createCGImage(img, from: img.extent, format: .RGBA8, colorSpace: look.space)
     }
 
-    /// 8-bit RGB TIFF, uncompressed (what pastes everywhere), without an alpha channel: a quarter smaller than RGBA.
+    /// 8-bit RGB TIFF (Core Image compresses it with LZW, lossless), without an alpha channel.
     static func tiffRGB(_ img: CIImage, _ look: PPLook) -> Data? {
         ctx.tiffRepresentation(of: img, format: .RGBX8, colorSpace: look.space)
     }

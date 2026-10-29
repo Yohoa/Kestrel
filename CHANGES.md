@@ -6,7 +6,7 @@ Newest first. Dates are when the change was made.
 
 - **Import your own LUTs**: choose a folder of `.cube` files again, with a way to set the input space (camera log) of a LUT whose name doesn't say it. Overrides kept outside the app (never inside it).
 
-## Unreleased (since 1.5.2)
+## 1.5.3 — 2026-10-29
 
 - **No more freezes on network shares**: clicking a folder, stepping between photos, launching with History / Favourites on a share, rating, labelling and Move to _Rejected all stay responsive. Measured on SMB: a 6.7 s freeze while browsing and 6 s at launch are gone (steps 0–1 ms). Causes: paths were "standardised" while drawing (a file-system check per call, a network round trip each), history paths were turned into URLs with a check each, and Move to _Rejected waited on the main thread for pending sidecar writes.
 - Ratings, labels and rejects show at once; on a share the sidecar is written afterwards (the old value comes back if that fails). The folder being opened shows a spinner in Folders until its photos are listed.

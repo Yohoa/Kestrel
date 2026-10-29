@@ -198,7 +198,7 @@ final class Model: ObservableObject {
         // symlinks) only gives the same answer while the old path still exists.
         let o = old.pathKey, n = new.pathKey
         func moved(_ p: String) -> String? { p == o ? n : p.hasPrefix(o + "/") ? n + p.dropFirst(o.count) : nil }
-        func moved(_ u: URL) -> URL { moved(u.pathKey).map { URL(fileURLWithPath: $0, isDirectory: true) } ?? u }
+        func moved(_ u: URL) -> URL { moved(u.pathKey).map { URL(fileURLWithPath: $0, isDirectory: u.hasDirectoryPath) } ?? u }
         let expanded = Set(expandedFolders.map { moved($0) ?? $0 })
         let favs = favorites.map(moved), recent = recentInputs.map(moved)
         let browsing = currentFolder.flatMap { moved($0.pathKey) }.map { URL(fileURLWithPath: $0, isDirectory: true) }
@@ -577,7 +577,8 @@ final class Model: ObservableObject {
         if let b = Self.builtInLUTFolder { loadLUTFolder(b, remember: false) }
         AppDelegate.model = self
         layoutStore.model = self
-        if !AppDelegate.pendingOpen.isEmpty {                   // opened from Finder: that, not the last folder
+        let openedFromFinder = !AppDelegate.pendingOpen.isEmpty
+        if openedFromFinder {                                   // opened from Finder: that, not the last folder
             let urls = AppDelegate.pendingOpen; AppDelegate.pendingOpen = []
             DispatchQueue.main.async { [weak self] in self?.load(urls) }
         }
@@ -604,13 +605,18 @@ final class Model: ObservableObject {
         let torn = detachedPanels.compactMap(Panel.init(rawValue:))
         detachedPanels = []
         if !torn.isEmpty { DispatchQueue.main.async { [weak self] in torn.forEach { self?.detach($0) } } }
-        if openLastFolder, let paths = UserDefaults.standard.stringArray(forKey: Self.lastOpenedKey) {
+        if !openedFromFinder, openLastFolder, let paths = UserDefaults.standard.stringArray(forKey: Self.lastOpenedKey) {
             // checked off the main thread (on a share each check is a round trip); a share that went away is
             // connected again by load()
             let urls = paths.map { URL(fileURLWithPath: $0, isDirectory: !Model.isPhotoFile($0)) }
             DispatchQueue.global(qos: .userInitiated).async { [weak self] in
-                let there = urls.filter { NetworkMountCheck.onMissingVolume($0) || FileManager.default.fileExists(atPath: $0.path) }
-                DispatchQueue.main.async { MainActor.assumeIsolated { if !there.isEmpty { self?.load(there) } } }
+                let there = urls.filter { NetworkMount.missing($0) != nil || FileManager.default.fileExists(atPath: $0.path) }
+                DispatchQueue.main.async {
+                    MainActor.assumeIsolated {
+                        guard let self, !there.isEmpty, self.loadSeq == 0, self.pendingMount == nil else { return }   // the user opened something meanwhile
+                        self.load(there)
+                    }
+                }
             }
         }
     }
@@ -1306,6 +1312,8 @@ final class Model: ObservableObject {
     }
 
     private var loadTask: Task<Void, Never>?
+    /// The share being connected before a folder on it opens ("/Volumes/Name").
+    private(set) var pendingMount: String?
     private var scanTask: Task<ScanResult, Never>?
     private var loadSeq = 0
     private var streamedSeq = -1                  // the load whose photos are already showing while it scans
@@ -1316,18 +1324,27 @@ final class Model: ObservableObject {
     func load(_ urls: [URL], recursive: Bool? = nil) {
         // a folder on a network share that went away: connect it first (once), then open the folder where it is now
         if let u = urls.first(where: { NetworkMount.missing($0) != nil }), let (root, server) = NetworkMount.missing(u) {
+            loadSeq += 1                                   // a later click wins over this reconnect
+            let seq = loadSeq
+            guard pendingMount != root else { return }     // already connecting it
+            pendingMount = root
             let name = (root as NSString).lastPathComponent
             status = "Connecting to “\(name)”…"
             folderTree.loading = u.pathKey
             NetworkMount.mount(server) { [weak self] point in
                 guard let self else { return }
-                guard let point else {
+                self.pendingMount = nil
+                guard self.loadSeq == seq else { return }   // something else was opened while it connected
+                guard let point = point ?? (NetworkMountCheck.notMounted(root) ? nil : root) else {
                     self.folderTree.loading = nil
                     self.status = "Couldn't connect to “\(name)”. Check that the server is on, then try again."
                     self.notify(.foldersRefreshed, self.status, icon: "network.slash")
                     return
                 }
-                self.load(urls.map { $0.path.hasPrefix(root) ? NetworkMount.moved($0, from: root, to: point) : $0 }, recursive: recursive)
+                self.load(urls.map { u in
+                    let p = u.pathKey
+                    return p == root || p.hasPrefix(root + "/") ? NetworkMount.moved(u, from: root, to: point) : u
+                }, recursive: recursive)
             }
             return
         }
@@ -1338,7 +1355,7 @@ final class Model: ObservableObject {
         let rec = recursive ?? includeSubfolders
         let depth = subfolderDepth
         status = "Loading…"
-        folderTree.loading = urls.first.map { Model.isPhotoFile($0.path) ? $0.deletingLastPathComponent().pathKey : $0.pathKey }
+        folderTree.loading = urls.first.map { $0.hasDirectoryPath ? $0.pathKey : $0.deletingLastPathComponent().pathKey }
         loadSeq += 1
         let seq = loadSeq
         let walk = Task.detached(priority: .userInitiated) { [weak self] in
@@ -1438,7 +1455,7 @@ final class Model: ObservableObject {
 
         if let first = urls.first {
             // from the name, not a stat on the main thread (a round trip on a share)
-            currentFolder = Model.isPhotoFile(first.path) ? first.deletingLastPathComponent() : first
+            currentFolder = first.hasDirectoryPath ? first : first.deletingLastPathComponent()
         }
         if !found.isEmpty {
             remember(&recentInputs, Self.inputsKey, urls)
@@ -1699,20 +1716,27 @@ final class Model: ObservableObject {
     /// use a photo's saved settings and can't wait.
     /// Like `ensureRead`, but a photo the reader hasn't reached is read off the main thread (on a share that is a
     /// round trip or more), then `then` runs. Already read: `then` runs at once.
+    /// Presses keep their order: while one waits for its read, later ones queue behind it (else a 5 pressed after
+    /// a waiting 3 would be overwritten by it). A press from before a folder change is dropped.
     func afterRead(_ urls: [URL], _ then: @escaping () -> Void) {
         let unread = urls.filter { u in libIndex[u].map { !library[$0].metadataRead } ?? false }
-        guard !unread.isEmpty else { then(); return }
+        guard !unread.isEmpty || readsWaiting > 0 else { then(); return }
+        readsWaiting += 1
+        let seq = loadSeq
         Model.io.async { [weak self] in
             let md = unread.map { ($0, PhotoMetadata.read($0)) }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard let self else { return }
+                    self.readsWaiting -= 1
+                    guard self.loadSeq == seq else { return }
                     self.applyMetadata(md.filter { u, _ in self.libIndex[u].map { !self.library[$0].metadataRead } ?? false }, reselect: false)
                     then()
                 }
             }
         }
     }
+    private var readsWaiting = 0
 
     func ensureRead(_ urls: [URL]) {
         let unread = urls.filter { u in libIndex[u].map { !library[$0].metadataRead } ?? false }
@@ -1858,7 +1882,9 @@ final class Model: ObservableObject {
 
     /// Undo of a move to _Rejected: the files go back (newest first), the photos come back into the list.
     private func moveBack(_ files: [(from: URL, to: URL)], photos: [Photo], states saved: [URL: PhotoState]) {
-        Model.io.async {
+        // on the sidecar queue like moveToRejected: every move in and out of _Rejected one after another, so a
+        // reject made right after an undo can't land in the folder while it is being removed
+        SidecarWriter.shared.submit({ () -> (Set<URL>, [String]) in
             let fm = FileManager.default
             var failed: [String] = []
             for f in files.reversed() {
@@ -1867,12 +1893,14 @@ final class Model: ObservableObject {
             }
             for d in Set(files.map { $0.to.deletingLastPathComponent() }) {      // remove _Rejected if it is empty now
                 if (try? fm.contentsOfDirectory(atPath: d.path))?.filter({ $0 != ".DS_Store" }).isEmpty == true {
-                    try? fm.removeItem(at: d)
+                    try? fm.removeItem(at: d.appendingPathComponent(".DS_Store"))
+                    rmdir(d.path)                        // removes it only if it really is empty
                 }
             }
-            let back = Set(files.map(\.from)).filter { fm.fileExists(atPath: $0.path) }
-            DispatchQueue.main.async {
+            return (Set(files.map(\.from)).filter { fm.fileExists(atPath: $0.path) }, failed)
+        }, completion: { [weak self] result in
                 MainActor.assumeIsolated {
+                    guard let self, let (back, failed) = try? result.get() else { return }
                     let ps = photos.filter { back.contains($0.url) && self.libIndex[$0.url] == nil }
                     self.library = Model.merge(self.library, ps.sorted { Model.pathOrder($0.url, $1.url) })
                     self.updateKindBadges()
@@ -1882,8 +1910,7 @@ final class Model: ObservableObject {
                     if let first = ps.first { self.select(first.url) }
                     self.status = failed.isEmpty ? "Moved \(ps.count) photo(s) back" : "Could not move back: " + failed.joined(separator: ", ")
                 }
-            }
-        }
+        })
     }
 
     private func removeFromLibrary(_ gone: Set<URL>) {
@@ -1979,8 +2006,12 @@ final class Model: ObservableObject {
                 guard let self else { return }
                 let (ok, errors) = (try? result.get()) ?? ([], ["write failed"])
                 let failed = Set(urls).subtracting(ok)
-                for u in failed where self.lastAppliedSeq[u] == seq {          // not changed again since
-                    if let i = self.libIndex[u], let old = before[u] { self.library[i] = old }
+                for u in failed {
+                    guard let i = self.libIndex[u], let old = before[u] else { continue }
+                    var new = old; update(&new)
+                    // only the field this write changed, and only if it still shows this write's value
+                    if old.rating != new.rating, self.library[i].rating == new.rating { self.library[i].rating = old.rating }
+                    if old.label != new.label, self.library[i].label == new.label { self.library[i].label = old.label }
                 }
                 if !failed.isEmpty { self.recomputeView() }
                 if let c = self.current, ok.contains(c) { self.loadXMPPanel() }

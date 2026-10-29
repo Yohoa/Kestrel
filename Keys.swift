@@ -40,7 +40,7 @@ enum Shortcuts {
             ("K  ⇧K", "Contrast up / down by ½ grade (−5…+5; the Develop slider goes in 0.1)"),
             ("W", "Toggle white balance: As Shot → Daylight → Auto → Custom"),
             ("⌘⇧R", "Reset image rendering to defaults"),
-            ("⌘C", "Copy the edited photo (full size, with its look, exposure and WB) to the clipboard, as HEIC (or TIFF: Settings ▸ Export)"),
+            ("⌘C", "Copy the edited photo (full size, with its look, exposure and WB) to the clipboard as a file and a picture: HEIC, JPG or TIFF (Settings ▸ Export)"),
             ("⌥⌘C  ⌘V", "Copy all settings / paste the copied settings (only the parts copied; to the selection). Copy Develop, White Balance and LUT on their own: Settings ▸ Shortcuts"),
         ]),
         ("Looks / LUTs", [

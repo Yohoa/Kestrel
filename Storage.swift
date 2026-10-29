@@ -206,7 +206,8 @@ enum ClipboardFiles {
             }
             var total = copies.reduce(0) { $0 + $1.2 }
             let dayAgo = Date().addingTimeInterval(-86_400)
-            for (d, date, size) in copies.sorted(by: { $0.1 < $1.1 }) where date < dayAgo || total > limit {
+            // never the newest: it may be what is on the clipboard right now (another window's copy, too)
+            for (d, date, size) in copies.sorted(by: { $0.1 < $1.1 }).dropLast() where date < dayAgo || total > limit {
                 try? fm.removeItem(at: d)
                 total -= size
             }

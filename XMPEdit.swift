@@ -449,6 +449,9 @@ enum XMPFile {
     /// Applies `changes` to the sidecar (creating a minimal one if missing). Keeps a one-time backup.
     /// Call it through `SidecarWriter` so writes to one file never overlap.
     static func write(_ changes: [XMPChange], for raw: URL) throws {
+        // the photo was moved (to _Rejected) by a move queued before this write: its sidecar went with it, so
+        // writing here would leave a stray one behind (and ⌘Z would then keep the real one in _Rejected)
+        guard FileManager.default.fileExists(atPath: raw.path) else { return }
         ScanIndex.shared.sidecarSeen(url(for: raw))       // it exists from now on (or is about to)
         let existing = read(raw)
         let base = existing?.text ?? XMPEdit.minimalDocument(ext: raw.pathExtension)

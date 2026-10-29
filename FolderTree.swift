@@ -163,8 +163,10 @@ enum NetworkMountCheck {
 
     static func mountPoints() -> Set<String> {
         var list: UnsafeMutablePointer<statfs>?
-        let n = getmntinfo(&list, MNT_NOWAIT)                 // the kernel's table; MNT_NOWAIT: never asks a server
+        // the kernel's table; MNT_NOWAIT: never asks a server. The _r_np form: called from more than one thread
+        let n = getmntinfo_r_np(&list, MNT_NOWAIT)
         guard n > 0, let list else { return [] }
+        defer { free(list) }
         return Set((0..<Int(n)).map { i in
             withUnsafeBytes(of: list[i].f_mntonname) { String(cString: $0.bindMemory(to: CChar.self).baseAddress!) }
         })
@@ -325,6 +327,14 @@ final class FolderReach: ObservableObject {
             }
             return
         }
+        // on a volume that is mounted: open it (the walk is off the main thread anyway; a share waking up can
+        // take longer than the probe waits); the probe only updates the badge
+        let parts = u.pathKey.split(separator: "/", omittingEmptySubsequences: true)
+        if parts.count >= 2, parts[0] == "Volumes", !NetworkMountCheck.notMounted("/Volumes/" + parts[1]) {
+            load(u)
+            probe(u) { [weak self] ok in self?.set(u, ok) }
+            return
+        }
         probe(u) { [weak self] ok in
             guard let self else { return }
             set(u, ok)
@@ -346,7 +356,13 @@ final class FolderReach: ObservableObject {
     }
 
     /// Whether the folder exists and can be listed, answered within 2 s (no answer = not reachable).
-    private func probe(_ u: URL, _ done: @escaping @MainActor (Bool) -> Void) {
+    private var probing: Set<URL> = []
+
+    private func probe(_ u: URL, _ report: @escaping @MainActor (Bool) -> Void) {
+        // one at a time per folder: on a hung share, threads would otherwise pile up with every mount event
+        guard !probing.contains(u) else { return }
+        probing.insert(u)
+        let done: @MainActor (Bool) -> Void = { [weak self] ok in self?.probing.remove(u); report(ok) }
         let lock = NSLock()
         var answered = false
         func answer(_ ok: Bool) {
