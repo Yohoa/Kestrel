@@ -557,7 +557,7 @@ final class Model: ObservableObject {
     private let bakeCache = LRU<PhotoKey, BakedPhoto>(limit: 8)
     private let previewCache = LRU<PreviewKey, PreviewResult>(limit: 12)
     private let histCache = LRU<PhotoKey, HistogramData>(limit: 64)
-    private let thumbCache = LRU<ThumbKey, [Int: NSImage]>(limit: 6)
+    private let thumbCache = LRU<ThumbKey, [Int: NSImage]>(limit: 4)
     private let exifCache = LRU<URL, (lines: [(String, String)], size: String)>(limit: 128)
     private var renderedKey: PreviewKey?               // what the picture on screen was rendered for
     private var watchdogTask: Task<Void, Never>?
@@ -782,6 +782,9 @@ final class Model: ObservableObject {
         viewMode = viewMode == .grid ? .single : .grid
         zoomed = false
         zoomImage = nil; zoomImageScale = 0
+        // the grid shows no big picture: let the decoded photos go (a step back to the single view decodes the one
+        // on screen again, ~0.1 s); fast browsing keeps them
+        if viewMode == .grid, !fastBrowsing { bakeCache.removeAll() }
         if viewMode == .single { scheduleRefresh() }
     }
 
@@ -2444,8 +2447,18 @@ final class Model: ObservableObject {
     /// 3:2 picture. Never fewer than the photo on screen and its two neighbours, never more than before.
     func sizeCaches() {
         let px = Double(fitTarget) * Double(fitTarget) / 1.5
-        bakeCache.setLimit(min(8, max(3, Int(300e6 / (px * 16)))))
-        previewCache.setLimit(min(12, max(3, Int(120e6 / (px * 4)))))
+        let f = fastBrowsing
+        bakeCache.setLimit(min(f ? 24 : 8, max(f ? 6 : 3, Int((f ? 1200e6 : 300e6) / (px * 16)))))
+        previewCache.setLimit(min(f ? 36 : 12, max(f ? 6 : 3, Int((f ? 480e6 : 120e6) / (px * 4)))))
+        thumbCache.setLimit(f ? 12 : 4)                  // 38 look thumbnails per photo
+        RAWSource.setCacheLimit(f ? 8 : 4)               // open decoders
+        filmThumbs.keep = f ? 1500 : 300
+    }
+
+    /// Settings ▸ Performance: more memory for faster stepping — bigger caches, more photos read ahead, and the
+    /// decoded photos kept while the grid is open.
+    @Published var fastBrowsing = UserDefaults.standard.bool(forKey: "fastBrowsing") {
+        didSet { UserDefaults.standard.set(fastBrowsing, forKey: "fastBrowsing"); sizeCaches() }
     }
 
     private func previewKey(_ url: URL, lookID: Int? = nil) -> PreviewKey {
@@ -2607,7 +2620,9 @@ final class Model: ObservableObject {
     private func prefetchNeighbours(of url: URL) {
         let s = RenderScheduler.shared
         guard let i = fileIndex[url] else { s.setNeighbours([]); return }
-        let candidates = [i + 1, i - 1].filter { files.indices.contains($0) }.map { files[$0] }
+        // fast browsing reads further ahead in the direction people usually go (forwards)
+        let around = fastBrowsing ? [i + 1, i - 1, i + 2, i + 3, i - 2] : [i + 1, i - 1]
+        let candidates = around.filter { files.indices.contains($0) }.map { files[$0] }
             .filter { photo($0)?.metadataRead != false }           // unread: its saved look isn't known, the render would be wasted
         s.setNeighbours(Set(candidates))
         let look = self.look

@@ -61,6 +61,7 @@ final class RAWSource {
     private var filter: CIRAWFilter?
     private var base: (exposure: Float, boost: Float, gamut: Bool, temp: Float, tint: Float)?
     private static let cache = LRU<URL, RAWSource>(limit: 4)
+    static func setCacheLimit(_ n: Int) { cache.setLimit(n) }
     private static let cacheLock = NSLock()
 
     private init(url: URL) { self.url = url }

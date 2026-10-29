@@ -8,6 +8,8 @@ Newest first. Dates are when the change was made.
 
 ## Unreleased (since 1.5.3)
 
+- **Settings ▸ Performance ▸ Fast browsing**: for a Mac with memory to spare, reads three photos ahead and two back (instead of one each way), keeps about four times as many decoded photos, previews and thumbnails, and keeps them while the grid is open. Measured: about 2.3 GB after 15 photos, against 0.54 GB normally.
+- The grid lets the decoded photos go (it shows no big picture): 0.61 GB on a network share after jumping through a folder, was 0.88 GB.
 - **Less memory**: the decoded photos and finished previews kept for going back are limited by size (about 300 MB and 120 MB) instead of by count, the clipping overlay is built from a copy of at most 2048 px, and thumbnails are 512 px with at most 300 kept (those longest out of view go first). Measured after stepping through 15 photos: 1.4 GB → 0.87 GB.
 - **⌥+ / ⌥− (and the status bar's − / +) stopped at +0.34 EV**: only the step was rounded, not the new value, so after the first press each one added 0.01. Fixed (the bug was there since 1.1); ⅓ EV steps now land on 0.33, 0.67, 1.00.
 - **Exposure Stats** is hidden by default (Panels menu or F4 shows it; Reset panel layout hides it again), and it is as tall as its rows: a fixed height cut the B row off.

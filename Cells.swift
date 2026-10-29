@@ -39,8 +39,8 @@ final class ThumbStore: ObservableObject {
     }
 
     private func trim() {
-        guard images.count > Self.keep else { return }
-        var drop = images.count - Self.keep
+        guard images.count > keep else { return }
+        var drop = images.count - keep
         var kept: [URL] = []
         for u in arrivedOrder {
             if drop > 0, !onScreen.contains(u), images[u] != nil { images[u] = nil; requested.remove(u); drop -= 1 }
@@ -79,7 +79,7 @@ final class ThumbStore: ObservableObject {
     nonisolated static let maxPixels = 512
     /// Thumbnails kept in memory; beyond this the ones longest out of view go (they come back from the disk cache
     /// or the file when scrolled to again).
-    static let keep = 300
+    var keep = 300
     private var onScreen: Set<URL> = []
     private var arrivedOrder: [URL] = []
 

@@ -170,6 +170,13 @@ struct SettingsView: View {
                 Button("Reset panel layout") { m.resetLayout() }
                     .help("Every panel back to its default column, order and size")
             }
+            Section("Performance") {
+                Toggle("Fast browsing (uses more memory)", isOn: $m.fastBrowsing)
+                Text(m.fastBrowsing
+                     ? "Reads three photos ahead and two back, keeps about four times as many decoded photos, previews and thumbnails, and keeps them while the grid is open. Can use 2–3 GB on a big screen."
+                     : "Reads one photo ahead and one back and keeps memory use moderate. Turn on for faster stepping if the Mac has memory to spare (16 GB or more).")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Grid view") {
                 HStack {
                     Text("Thumbnail size")
