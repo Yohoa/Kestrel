@@ -23,20 +23,25 @@ extension ContentView {
     var statusBarContent: some View {
         HStack(spacing: 9) {
             Button { m.step(-1) } label: { hitTarget(Image(systemName: "chevron.left")) }
-                .buttonStyle(.plain).disabled((m.currentIndex ?? 0) == 0).help("Previous photo (←)")
+                .buttonStyle(.plain).disabled((m.currentIndex ?? 0) == 0).help("Previous photo (←)").layoutPriority(2)
             Text(m.currentIndex.map { "\($0 + 1)/\(m.files.count)" } ?? "–/\(m.files.count)")
                 .font(.system(size: 12).monospacedDigit()).lineLimit(1).fixedSize().frame(minWidth: 50)
                 .help("Position of this photo among the shown photos")
             Button { m.step(1) } label: { hitTarget(Image(systemName: "chevron.right")) }
-                .buttonStyle(.plain).disabled(m.currentIndex.map { $0 >= m.files.count - 1 } ?? true).help("Next photo (→)")
+                .buttonStyle(.plain).disabled(m.currentIndex.map { $0 >= m.files.count - 1 } ?? true).help("Next photo (→)").layoutPriority(2)
             Text(m.current?.lastPathComponent ?? "").font(.system(size: 12, design: .monospaced)).lineLimit(1).truncationMode(.middle)
                 .help(m.current?.path ?? "")
-            Text(m.imageSize).font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary).lineLimit(1).fixedSize()
+            // shown whole or not at all (a cut-off "6000x…" reads as nonsense)
+            ViewThatFits(in: .horizontal) {
+                Text(m.imageSize).font(.system(size: 11).monospacedDigit()).foregroundStyle(.secondary).lineLimit(1).fixedSize()
+                Color.clear.frame(width: 0)
+            }
+            .layoutPriority(-1)
                 .help("Size of the photo in pixels")
             Divider()
             Button { m.nudgeExposure(NSEvent.modifierFlags.contains(.shift) ? -1 : -1.0 / 3) } label: { hitTarget(Image(systemName: "minus.square")) }.buttonStyle(.plain)
                 .help("Exposure −⅓ EV (⇧-click: −1 EV)")
-            Text(String(format: "%+.2f EV", m.exposure)).font(.system(size: 12).monospacedDigit()).lineLimit(1).fixedSize()
+            Text(String(format: "%+.2f EV", m.exposure)).font(.system(size: 12).monospacedDigit()).lineLimit(1).fixedSize().layoutPriority(2)
                 .help("Exposure of this photo. A sets it to 0 (A again restores it), ⇧A meters it automatically")
             Button { m.nudgeExposure(NSEvent.modifierFlags.contains(.shift) ? 1 : 1.0 / 3) } label: { hitTarget(Image(systemName: "plus.square")) }.buttonStyle(.plain)
                 .help("Exposure +⅓ EV (⇧-click: +1 EV)")
@@ -46,12 +51,13 @@ extension ContentView {
                 Button("Pick neutral…") { m.pickingWB = true }
             }
             .fixedSize()
+            .layoutPriority(2)        // a fixed-size view that is offered less draws past its slot, over its neighbours
             .help("White balance in Kelvin / tint: pick a preset, or a neutral spot on the photo (W switches As Shot → Daylight → Auto → Custom)")
             Divider()
-            ratingControls
+            ratingControls.fixedSize().layoutPriority(2)
             Divider()
-            indicator("O", on: m.showOver) { m.toggleOver() }.help("Show blown highlights in red (O)")
-            indicator("U", on: m.showUnder) { m.toggleUnder() }.help("Show crushed shadows in blue (U)")
+            indicator("O", on: m.showOver) { m.toggleOver() }.help("Show blown highlights in red (O)").layoutPriority(2)
+            indicator("U", on: m.showUnder) { m.toggleUnder() }.help("Show crushed shadows in blue (U)").layoutPriority(2)
             // follows a pinch or drag live (the zoom state is its own observable)
             Observing(m.zoomState) { _ in indicator(m.zoomLabel, on: m.zoomed) { m.toggleZoom() } }
                 .overlay {
@@ -62,6 +68,7 @@ extension ContentView {
                         .padding(.top, -14).padding(.horizontal, -6).padding(.bottom, -4)
                 }
                 .help("Drag left / right to zoom (⌥ finer, ⇧ faster). Click: fit ↔ smart zoom, double-click: fit. ⌘+ / ⌘− step, ⌘1 = 100 %, ⌘0 = fit")
+                .layoutPriority(2)
             if m.currentIsSelected {
                 Text("Sel").font(.caption.bold()).foregroundStyle(.red).help("The photo on screen is part of the selection")
             }
@@ -82,16 +89,28 @@ extension ContentView {
             Button { m.toggleGrid() } label: { Image(systemName: m.viewMode == .grid ? "photo" : "square.grid.2x2") }
                 .buttonStyle(.plain).help(m.viewMode == .grid ? "Single photo (G)" : "Grid view (G)")
             if m.viewMode == .grid { Slider(value: $m.gridCell, in: 120...360).frame(width: 90).help("Thumbnail size") }
-            Text("\(m.shownPhotos.count)/\(m.library.count)\(m.filter.isActive ? " filtered" : "")\(m.rejectedHidden > 0 ? " · \(m.rejectedHidden) rejected hidden" : "")")
+            // the long form, the bare count, or nothing: never wrapped onto two lines
+            ViewThatFits(in: .horizontal) {
+                Text("\(m.shownPhotos.count)/\(m.library.count)\(m.filter.isActive ? " filtered" : "")\(m.rejectedHidden > 0 ? " · \(m.rejectedHidden) rejected hidden" : "")")
+                    .lineLimit(1).fixedSize()
+                Text("\(m.shownPhotos.count)/\(m.library.count)").lineLimit(1).fixedSize()
+                Color.clear.frame(width: 0)
+            }
                 .font(.caption.monospacedDigit())
                 .foregroundStyle(m.filter.isActive ? Color.accentColor : .secondary)
                 .help(m.filter.isActive ? "Shown / all photos in the folder. Sort & Filter is hiding some: V switches the filter off" : "Shown / all photos in the folder")
-            Text(m.status).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail).layoutPriority(-1)
+            // shortened while there is room for a few words; below that hidden (a lone "…" says nothing)
+            ViewThatFits(in: .horizontal) {
+                Text(m.status).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail).frame(minWidth: 90, alignment: .leading)
+                Color.clear.frame(width: 0)
+            }
+            .layoutPriority(-1)
                 .help(m.status)
             Spacer(minLength: 6)
-            Button("Export As…") { m.exportCurrent() }.glassButton().disabled(m.current == nil || m.exporting)
+            Button("Export As…") { m.exportCurrent() }.glassButton().disabled(m.current == nil || m.exporting).fixedSize().layoutPriority(2)
                 .help("This photo with its look, to a place you choose (⌘E)")
             Button(m.exportAllTitle) { m.exportAll() }
+                .fixedSize().layoutPriority(2)
                 .glassButton(prominent: true)
                 .help(m.exportOwnLook ? "Exports the \(m.exportScopeText) photos, each with its own look (rejected ones never). Export settings: ⚙︎"
                       : "Exports the \(m.exportScopeText) photos once per look ticked in the LUT panel (rejected ones never)")

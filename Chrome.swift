@@ -184,6 +184,7 @@ struct PanelBox<Trailing: View, Content: View>: View {
                     .help(panel.map { "Close this panel (the Panels menu or F\($0.fKey)\($0.needsShift ? " with ⇧" : "") brings it back)" } ?? "Close")
             }
             .padding(.horizontal, 10)
+            .padding(.leading, detached ? 62 : 0)          // clear of the close / minimise / zoom buttons
             .frame(height: 28)
             .contentShape(Rectangle())
             .panelDraggable(panel, enabled: !detached)
@@ -261,9 +262,11 @@ struct DetachedPanelView: View {
     let panel: Panel
 
     var body: some View {
+        // up to the window's top edge: the panel's own header sits in the title bar, beside the window buttons,
+        // instead of under an empty band (the title bar's height plus a gap)
         ContentView(m: m).panelView(panel)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .padding(.top, 22)
+            .ignoresSafeArea(.container, edges: .top)
             .background(Color(nsColor: .windowBackgroundColor).opacity(m.windowTint))
             .background(WindowConfigurator())
             .environmentObject(m)
