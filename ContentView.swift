@@ -23,12 +23,12 @@ struct ContentView: View {
                 else {
                     column("left", width: layout.leftWidth)
                         .transition(.move(edge: .leading).combined(with: .opacity))
-                    if m.leftVisible { SidebarSplitter(store: layout, left: true) }
+                    if m.leftVisible { SidebarGap(store: layout, left: true) }
                 }
                 centerArea.clipShape(RoundedRectangle(cornerRadius: 14)).padding(3)
                 if layout.rightCollapsed { if m.rightVisible { FoldedSidebar(store: layout, left: false) } else { column("right", width: 0) } }
                 else {
-                    if m.rightVisible { SidebarSplitter(store: layout, left: false) }
+                    if m.rightVisible { SidebarGap(store: layout, left: false) }
                     column("right", width: layout.rightWidth)
                         .transition(.move(edge: .trailing).combined(with: .opacity))
                 }
@@ -40,10 +40,16 @@ struct ContentView: View {
             .overlay(alignment: .trailing) { if layout.peekRight { peekIfAny("right", layout, left: false) } }
             }
             if m.shown(.filmstrip) && m.viewMode == .single {
-                filmstrip.frame(height: 128).clipShape(RoundedRectangle(cornerRadius: 14)).softCard(14).padding(.horizontal, 3)
-                    .transition(.move(edge: .bottom).combined(with: .opacity))
+                Observing(m.layoutStore) { layout in
+                    filmstrip.frame(height: layout.filmstripHeight).clipShape(RoundedRectangle(cornerRadius: 14)).softCard(14).padding(.horizontal, 3)
+                        // the handle in the gap above, reaching a little into the picture and the strip
+                        .overlay(alignment: .top) {
+                            FilmstripSplitter(store: layout).frame(height: 16).offset(y: -10).padding(.horizontal, 40)
+                        }
+                }
+                .transition(.move(edge: .bottom).combined(with: .opacity))
             }
-            statusBar.frame(height: 40).softCard(12).padding(.horizontal, 3)
+            statusBar.frame(height: 34).softCard(12).padding(.horizontal, 3)
         }
         .padding(6)                             // same gap on the sides as at the bottom
         .background(Color(nsColor: .windowBackgroundColor).opacity(m.windowTint))        // 0 = fully transparent window

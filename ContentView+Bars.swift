@@ -17,7 +17,7 @@ extension ContentView {
 
     /// Status-bar buttons are small to look at but get a target the size of a fingertip (Sidecar, trackpad).
     func hitTarget<V: View>(_ v: V, width: CGFloat = 22) -> some View {
-        v.frame(minWidth: width, minHeight: 34).contentShape(Rectangle())
+        v.frame(minWidth: width, minHeight: 30).contentShape(Rectangle())
     }
 
     var statusBarContent: some View {
@@ -144,7 +144,7 @@ extension ContentView {
                 .padding(.horizontal, 5).padding(.vertical, 1)
                 .background(on ? Color.accentColor : Color.gray.opacity(0.25)).foregroundStyle(on ? Color.white : Color.secondary)
                 .clipShape(RoundedRectangle(cornerRadius: 3))
-                .frame(minHeight: 34).contentShape(Rectangle())     // the target, not the look
+                .frame(minHeight: 30).contentShape(Rectangle())     // the target, not the look
         }.buttonStyle(.plain)
     }
 
@@ -250,7 +250,7 @@ struct StarStrip: View {
                 Button { if Date().timeIntervalSince(box.dragEnded) > 0.3 { set(i) } } label: {
                     Image(systemName: i <= shown ? "star.fill" : "star").font(.system(size: 11)).foregroundStyle(.orange)
                         .opacity(box.preview != nil && i > shown ? 0.45 : 1)
-                        .frame(minWidth: Self.cell, minHeight: 34).contentShape(Rectangle())
+                        .frame(minWidth: Self.cell, minHeight: 30).contentShape(Rectangle())
                 }
                 .buttonStyle(.plain)
                 .help("\(i) star\(i == 1 ? "" : "s") (\(i)). Drag along the stars to set, off the left end to clear (0)")

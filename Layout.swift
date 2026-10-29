@@ -132,12 +132,19 @@ final class LayoutStore: ObservableObject {
     /// Pulled this far below the minimum width while dragging, a column folds itself.
     static let foldThreshold: Double = 170
 
+    /// The filmstrip's height, set with the handle above it.
+    @Published var filmstripHeight: Double = LayoutStore.clampFilmstrip(LayoutStore.load("filmstripHeight", LayoutStore.defaultFilmstrip)) {
+        didSet { UserDefaults.standard.set(filmstripHeight, forKey: "filmstripHeight") }
+    }
+    static let defaultFilmstrip: Double = 128
+    static func clampFilmstrip(_ h: Double) -> Double { min(max(h, 90), 320) }
+
     /// What one side takes besides the picture: folded strip, column + splitter, or the empty drop zone.
     private func sideWidth(left: Bool) -> Double {
         let visible = (left ? model?.leftVisible : model?.rightVisible) ?? true
         guard visible else { return 14 }
         if left ? leftCollapsed : rightCollapsed { return stripWidth }
-        return (left ? leftWidth : rightWidth) + 8
+        return (left ? leftWidth : rightWidth) + Double(SidebarSplitter.gap)
     }
 
     /// Keeps the picture at least `minPicture` wide when the window shrinks: narrows the right column, then the left,
@@ -245,6 +252,12 @@ final class SplitterNSView: NSView {
     var onEnd: (() -> Void)?
     /// A handle between two stacked panels: up/down cursor, drags vertically, grip only while hovered.
     var vertical = false
+    /// Always show the grip of a vertical handle (the filmstrip's), not only on hover.
+    var gripAlways = false
+    /// Where the grip is drawn across the handle, from its leading / top edge; nil = the middle. The handle's area
+    /// is wider than the gap it sits in (a fingertip or a Pencil needs more than 3 pt), the grip marks the gap.
+    var gripAt: CGFloat?
+    private var scrolling = false, scrolled: CGFloat = 0
     private var start: NSPoint = .zero
     private var moved = false
     private var hovered = false { didSet { needsDisplay = true } }
@@ -271,15 +284,35 @@ final class SplitterNSView: NSView {
         guard !moved else { return }
         if e.clickCount == 2 { onDoubleClick?() } else if e.clickCount == 1 { onClick?() }
     }
+
+    /// Two fingers on a trackpad, or a finger on an iPad used as a Sidecar display (fingers arrive as scrolling, only
+    /// the Pencil as a mouse): moving across the handle drags it, the same as with the mouse.
+    override func scrollWheel(with e: NSEvent) {
+        let along = vertical ? e.scrollingDeltaY : e.scrollingDeltaX
+        let across = vertical ? e.scrollingDeltaX : e.scrollingDeltaY
+        guard e.hasPreciseScrollingDeltas, !e.phase.isEmpty || scrolling else { super.scrollWheel(with: e); return }
+        if e.phase.contains(.began) || e.phase.contains(.mayBegin) {
+            guard abs(along) >= abs(across) || along == 0 else { super.scrollWheel(with: e); return }
+            scrolling = true; scrolled = 0; onBegin?()
+        }
+        guard scrolling else { super.scrollWheel(with: e); return }
+        // natural scrolling: the deltas follow the fingers; otherwise they are the other way round
+        let finger = along * (e.isDirectionInvertedFromDevice ? 1 : -1)
+        scrolled += vertical ? -finger : finger                       // vertical: downwards is positive, as for mouse drags
+        onDrag?(scrolled)
+        if e.phase.contains(.ended) || e.phase.contains(.cancelled) { scrolling = false; onEnd?() }
+    }
     override func draw(_ dirtyRect: NSRect) {
         if vertical {
-            guard hovered else { return }
-            let grip = NSRect(x: bounds.midX - 18, y: bounds.midY - 1.5, width: 36, height: 3)
+            guard hovered || gripAlways else { return }
+            let y = gripAt.map { bounds.maxY - $0 } ?? bounds.midY          // flipped: from the top
+            let grip = NSRect(x: bounds.midX - 18, y: y - 1.5, width: 36, height: 3)
             NSColor.labelColor.withAlphaComponent(0.35).setFill()
             NSBezierPath(roundedRect: grip, xRadius: 1.5, yRadius: 1.5).fill()
         } else {
-            let grip = NSRect(x: bounds.midX - 1.5, y: bounds.midY - 18, width: 3, height: 36)
-            NSColor.labelColor.withAlphaComponent(0.18).setFill()
+            let x = gripAt ?? bounds.midX
+            let grip = NSRect(x: x - 1.5, y: bounds.midY - 18, width: 3, height: 36)
+            NSColor.labelColor.withAlphaComponent(hovered ? 0.35 : 0.18).setFill()
             NSBezierPath(roundedRect: grip, xRadius: 1.5, yRadius: 1.5).fill()
         }
     }
@@ -337,6 +370,7 @@ struct SidebarSplitter: NSViewRepresentable {
 
     private func configure(_ v: SplitterNSView, _ c: Coordinator) {
         let store = self.store, left = self.left
+        v.gripAt = (left ? Self.intoPanels : Self.intoPicture) + Self.gap / 2       // in the gap, not the middle of the handle
         v.onBegin = { MainActor.assumeIsolated { c.startWidth = left ? store.leftWidth : store.rightWidth; store.dragging = true } }
         v.onEnd = { MainActor.assumeIsolated { store.dragging = false } }
         v.onDrag = { dx in
@@ -353,8 +387,59 @@ struct SidebarSplitter: NSViewRepresentable {
         v.onClick = { MainActor.assumeIsolated { store.toggleCollapsed(left: left) } }
     }
 
+    /// The gap between a column and the picture: as wide as the gap at the window's edge (6 window + 3 panel).
+    static let gap: CGFloat = 3
+    /// The handle reaches this far past the gap into the panel side (only the panels' own margin, not their
+    /// scroll bars) and into the picture side, so it is easy to hit with a finger or a Pencil.
+    static let intoPanels: CGFloat = 3, intoPicture: CGFloat = 12
+
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: SplitterNSView, context: Context) -> CGSize? {
-        CGSize(width: 8, height: proposal.height ?? 100)
+        CGSize(width: Self.gap + Self.intoPanels + Self.intoPicture, height: proposal.height ?? 100)
+    }
+}
+
+/// The thin gap that holds a side splitter; the handle itself is wider and overlaps both neighbours.
+struct SidebarGap: View {
+    @ObservedObject var store: LayoutStore
+    let left: Bool
+
+    var body: some View {
+        let s = SidebarSplitter.self
+        Color.clear.frame(width: s.gap)
+            .overlay {
+                SidebarSplitter(store: store, left: left)
+                    .padding(.leading, -(left ? s.intoPanels : s.intoPicture))
+                    .padding(.trailing, -(left ? s.intoPicture : s.intoPanels))
+            }
+            .zIndex(1)                                   // above the picture it reaches into
+    }
+}
+
+/// The handle between the picture and the filmstrip: drag up or down to make the filmstrip taller or shorter,
+/// double-click for its usual height. Two fingers (trackpad, Sidecar) drag it too.
+struct FilmstripSplitter: NSViewRepresentable {
+    @ObservedObject var store: LayoutStore
+    final class Coordinator { var start: Double = 0 }
+    func makeCoordinator() -> Coordinator { Coordinator() }
+
+    func makeNSView(context: Context) -> SplitterNSView {
+        let v = SplitterNSView()
+        v.vertical = true
+        v.gripAlways = true
+        v.gripAt = 6.5                  // the middle of the 7 pt gap above the strip (the handle starts 10 pt above it)
+        v.toolTip = "Drag to make the filmstrip taller or shorter · double-click: usual height"
+        configure(v, context.coordinator)
+        return v
+    }
+    func updateNSView(_ v: SplitterNSView, context: Context) { configure(v, context.coordinator) }
+
+    private func configure(_ v: SplitterNSView, _ c: Coordinator) {
+        let store = self.store
+        v.onBegin = { MainActor.assumeIsolated { c.start = store.filmstripHeight } }
+        v.onDrag = { dy in MainActor.assumeIsolated { store.filmstripHeight = LayoutStore.clampFilmstrip(c.start - Double(dy)) } }
+        v.onEnd = {}
+        v.onClick = nil
+        v.onDoubleClick = { MainActor.assumeIsolated { withAnimation(LayoutStore.spring) { store.filmstripHeight = LayoutStore.defaultFilmstrip } } }
     }
 }
 
