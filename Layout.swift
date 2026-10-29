@@ -422,7 +422,7 @@ struct SidebarGap: View {
 }
 
 /// The handle between the picture and the filmstrip: drag up or down to make the filmstrip taller or shorter,
-/// double-click for its usual height. Two fingers (trackpad, Sidecar) drag it too.
+/// click to fold it. Two fingers (trackpad, Sidecar) drag it too.
 struct FilmstripSplitter: NSViewRepresentable {
     @ObservedObject var store: LayoutStore
     final class Coordinator { var start: Double = 0 }
@@ -433,7 +433,7 @@ struct FilmstripSplitter: NSViewRepresentable {
         v.vertical = true
         v.gripAlways = true
         v.gripAt = 6.5                  // the middle of the 7 pt gap above the strip (the handle starts 10 pt above it)
-        v.toolTip = "Drag to make the filmstrip taller or shorter · double-click: usual height"
+        v.toolTip = "Drag to make the filmstrip taller or shorter · click to fold it (F6 or the filmstrip button brings it back)"
         configure(v, context.coordinator)
         return v
     }
@@ -444,8 +444,9 @@ struct FilmstripSplitter: NSViewRepresentable {
         v.onBegin = { MainActor.assumeIsolated { c.start = store.filmstripHeight } }
         v.onDrag = { dy in MainActor.assumeIsolated { store.filmstripHeight = LayoutStore.clampFilmstrip(c.start - Double(dy)) } }
         v.onEnd = {}
-        v.onClick = nil
-        v.onDoubleClick = { MainActor.assumeIsolated { withAnimation(LayoutStore.spring) { store.filmstripHeight = LayoutStore.defaultFilmstrip } } }
+        // a click folds it, like the side splitters fold their column (no double-click: its first click would fold)
+        v.onClick = { MainActor.assumeIsolated { withAnimation(LayoutStore.spring) { store.model?.toggle(.filmstrip) } } }
+        v.onDoubleClick = nil
     }
 }
 
