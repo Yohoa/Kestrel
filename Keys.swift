@@ -10,12 +10,13 @@ import SwiftUI
 enum Shortcuts {
     static let groups: [(title: String, items: [(keys: String, text: String)])] = [
         ("Navigate", [
-            ("← →  Space  ⇧Space", "Previous / next photo (follows the filter); in the grid Space marks / unmarks the photo, like ⌘-click"),
+            ("← →  Space  ⇧Space", "Previous / next photo (follows the filter). In the grid: Space marks / unmarks the photo (⌘-click), ⇧Space selects the range up to it (⇧-click)"),
+            ("Return", "Grid → the photo in single view; single view → back to the grid"),
             ("Swipe, flick", "Two fingers sideways, or a quick sideways drag, on the photo: previous / next"),
             ("Home  End", "First / last photo"),
             ("↑ ↓", "One row up / down in the grid"),
             ("G", "Image grid ↔ single image"),
-            ("Return, double-click", "Open the photo in single view (grid)"),
+            ("Double-click", "Open the photo in single view (grid)"),
             ("⌘O  ⌘⇧O  ⌥O", "Open files / folder / folder with subfolders"),
             ("⌘⇧F4", "Reload the current folder"),
             ("⌘F", "Reveal in Finder"),
@@ -156,11 +157,14 @@ extension Model {
         case 115: goFirst(); return true                                  // Home
         case 119: goLast(); return true                                   // End
         case 49:                                                          // Space / ⇧Space
-            // grid: Space marks / unmarks the current photo, as ⌘-click does; single view: next / previous (FRV)
-            if viewMode == .grid, !shift, let c = current { click(c, command: true, shift: false) } else { step(shift ? -1 : 1) }
+            // grid: Space marks / unmarks the current photo (⌘-click), ⇧Space selects the range from the last marked
+            // one to it (⇧-click); single view: next / previous (FRV)
+            if viewMode == .grid, let c = current { click(c, command: !shift, shift: shift) } else { step(shift ? -1 : 1) }
             return true
         case 48: toggleHideAllPanels(); return true                       // Tab (FRV)
-        case 36, 76: if viewMode == .grid, let c = current { open(c); return true }; return false   // Return
+        case 36, 76:                                                      // Return / Enter: grid ↔ single view
+            if viewMode == .grid { if let c = current { open(c) } } else { toggleGrid() }
+            return true
         case 122: sheet = .help; return true                              // F1
         case 53:                                                           // Esc
             if pickingWB { pickingWB = false; return true }
