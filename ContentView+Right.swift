@@ -148,16 +148,23 @@ extension ContentView {
 
     var lutPanel: some View {
         PanelBox("LUT", panel: .looks, onClose: { m.toggle(.looks) }, trailing: { HStack(spacing: 6) { lookModeSwitch; lutMenu } }) {
-            ScrollView {
-                // Adapts to the column width: as many cells per row as fit (thumbnail size from the gear menu)
-                LazyVGrid(columns: [GridItem(.adaptive(minimum: m.lutColumns == 2 ? 160 : 104), spacing: 6)], spacing: 8) {
-                    ForEach(m.visibleLooks) { look in lookCell(look) }
+            VStack(spacing: 0) {
+                ScrollView {
+                    // Adapts to the column width: as many cells per row as fit (thumbnail size from the gear menu)
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: m.lutColumns == 2 ? 160 : 104), spacing: 6)], spacing: 8) {
+                        ForEach(m.visibleLooks) { look in lookCell(look) }
+                    }
+                    .padding(8)
                 }
-                .padding(8)
-                Text(lutFooter).font(.caption2).foregroundStyle(.secondary).padding(.bottom, 6)
+                .overlay(alignment: .top) { NoticeView(center: m.notices, place: .lut) }
+                // below the scrolling grid, not inside it: inside, the lazily laid-out grid could end up under it,
+                // and the line was drawn over the thumbnails
+                Divider()
+                Text(lutFooter).font(.caption2).foregroundStyle(.secondary).lineLimit(1).truncationMode(.middle)
+                    .padding(.horizontal, 8).padding(.vertical, 5)
+                    .frame(maxWidth: .infinity)
                     .help("Ticked looks are the ones Export uses when it exports once per look (Export settings)")
             }
-            .overlay(alignment: .top) { NoticeView(center: m.notices, place: .lut) }
         }
     }
 
