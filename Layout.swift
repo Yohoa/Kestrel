@@ -85,8 +85,9 @@ final class LayoutStore: ObservableObject {
         let windowWidth = Double(model?.mainWindow?.frame.width ?? 1500)
         let otherVisible = (left ? model?.rightVisible : model?.leftVisible) ?? true
         let otherCollapsed = left ? rightCollapsed : leftCollapsed
-        let other = otherCollapsed ? stripWidth : (otherVisible ? (left ? rightWidth : leftWidth) + 8 : emptyWidth)
-        let chrome: Double = 8 + 6 + 12                 // this splitter, picture padding, window padding
+        let g = Double(SidebarSplitter.gap)
+        let other = otherCollapsed ? stripWidth : (otherVisible ? (left ? rightWidth : leftWidth) + g : emptyWidth)
+        let chrome: Double = g + 6 + 12                 // this splitter's gap, picture padding, window padding
         let limit = max(Self.minWidth, min(Self.maxWidth, windowWidth - other - chrome - Self.minPicture))
         let c = min(max(w, Self.minWidth), limit)
         if left { leftWidth = c } else { rightWidth = c }
@@ -293,14 +294,17 @@ final class SplitterNSView: NSView {
         let along = vertical ? e.scrollingDeltaY : e.scrollingDeltaX
         let across = vertical ? e.scrollingDeltaX : e.scrollingDeltaY
         guard e.hasPreciseScrollingDeltas, !e.phase.isEmpty || scrolling else { super.scrollWheel(with: e); return }
-        if e.phase.contains(.began) || e.phase.contains(.mayBegin) {
-            guard abs(along) >= abs(across) || along == 0 else { super.scrollWheel(with: e); return }
+        // armed only on .began (a resting finger's .mayBegin has no direction yet), and only for movement along
+        // the handle's axis; anything else goes on to the view behind
+        if e.phase.contains(.began) {
+            guard abs(along) > abs(across) else { scrolling = false; super.scrollWheel(with: e); return }
             scrolling = true; scrolled = 0; onBegin?()
         }
         guard scrolling else { super.scrollWheel(with: e); return }
         // natural scrolling: the deltas follow the fingers; otherwise they are the other way round
         let finger = along * (e.isDirectionInvertedFromDevice ? 1 : -1)
-        scrolled += vertical ? -finger : finger                       // vertical: downwards is positive, as for mouse drags
+        scrolled += finger                // with natural scrolling a positive deltaY is fingers moving down: downwards is
+                                          // positive for mouse drags on a vertical handle too
         onDrag?(scrolled)
         if e.phase.contains(.ended) || e.phase.contains(.cancelled) { scrolling = false; onEnd?() }
     }
@@ -393,7 +397,7 @@ struct SidebarSplitter: NSViewRepresentable {
     static let gap: CGFloat = 3
     /// The handle reaches this far past the gap into the panel side (only the panels' own margin, not their
     /// scroll bars) and into the picture side, so it is easy to hit with a finger or a Pencil.
-    static let intoPanels: CGFloat = 3, intoPicture: CGFloat = 12
+    static let intoPanels: CGFloat = 3, intoPicture: CGFloat = 5
 
     func sizeThatFits(_ proposal: ProposedViewSize, nsView: SplitterNSView, context: Context) -> CGSize? {
         CGSize(width: Self.gap + Self.intoPanels + Self.intoPicture, height: proposal.height ?? 100)

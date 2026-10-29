@@ -105,7 +105,8 @@ extension ContentView {
                 .help(m.filter.isActive ? "Shown / all photos in the folder. Sort & Filter is hiding some: V switches the filter off" : "Shown / all photos in the folder")
             // shortened while there is room for a few words; below that hidden (a lone "…" says nothing)
             ViewThatFits(in: .horizontal) {
-                Text(m.status).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail).frame(minWidth: 90, alignment: .leading)
+                Text(m.status).font(.caption).foregroundStyle(.secondary).lineLimit(1).truncationMode(.tail)
+                    .frame(minWidth: 90, idealWidth: 90, maxWidth: .infinity, alignment: .leading)   // ViewThatFits tests the ideal width
                 Color.clear.frame(width: 0)
             }
             .layoutPriority(-1)
@@ -237,13 +238,11 @@ extension ContentView {
 
 /// The five stars in the status bar. A click sets that many; a drag along them sets the rating where it is let go,
 /// and dragging off the left of the first star clears it (no other way to get back to no stars without a key).
+/// One gesture for both, so a click and a drag can never both fire (two writes, two undo steps).
 struct StarStrip: View {
     let rating: Int
     let set: (Int) -> Void
-    final class Box: ObservableObject {
-        @Published var preview: Int?            // the rating under the pointer while dragging
-        var dragEnded = Date.distantPast        // a drag let go over a star is not also a click on it
-    }
+    final class Box: ObservableObject { @Published var preview: Int? }    // the rating under the pointer while dragging
     @StateObject private var box = Box()
     static let cell: CGFloat = 14, gap: CGFloat = 2
 
@@ -251,25 +250,29 @@ struct StarStrip: View {
         let shown = box.preview ?? rating
         HStack(spacing: Self.gap) {
             ForEach(1...5, id: \.self) { i in
-                Button { if Date().timeIntervalSince(box.dragEnded) > 0.3 { set(i) } } label: {
-                    Image(systemName: i <= shown ? "star.fill" : "star").font(.system(size: 11)).foregroundStyle(.orange)
-                        .opacity(box.preview != nil && i > shown ? 0.45 : 1)
-                        .frame(minWidth: Self.cell, minHeight: 30).contentShape(Rectangle())
-                }
-                .buttonStyle(.plain)
-                .help("\(i) star\(i == 1 ? "" : "s") (\(i)). Drag along the stars to set, off the left end to clear (0)")
+                Image(systemName: i <= shown ? "star.fill" : "star").font(.system(size: 11)).foregroundStyle(.orange)
+                    .opacity(box.preview != nil && i > shown ? 0.45 : 1)
+                    .frame(minWidth: Self.cell, minHeight: 30)
             }
         }
-        // a drag, not a click: the buttons keep their clicks
-        .simultaneousGesture(DragGesture(minimumDistance: 4).onChanged { g in
-            box.preview = Self.stars(at: g.location.x)
+        .contentShape(Rectangle())
+        .help("Click a star to set (1–5); drag along the stars to set, off the left end to clear (0)")
+        .gesture(DragGesture(minimumDistance: 0).onChanged { g in
+            if abs(g.translation.width) >= 4 { box.preview = Self.stars(at: g.location.x) }
         }.onEnded { g in
-            let r = Self.stars(at: g.location.x)
             box.preview = nil
-            box.dragEnded = Date()
-            if r != rating { set(r) }
+            // a click: the star under the pointer; a drag: where it was let go. Always set (it acts on the selection,
+            // which may differ from the photo on screen)
+            set(abs(g.translation.width) < 4 ? Self.star(under: g.location.x) : Self.stars(at: g.location.x))
         })
+        .accessibilityElement()
+        .accessibilityLabel("Rating")
+        .accessibilityValue("\(rating) star\(rating == 1 ? "" : "s")")
+        .accessibilityAdjustableAction { d in set(d == .increment ? min(rating + 1, 5) : max(rating - 1, 0)) }
     }
+
+    /// The star a click lands on (1–5).
+    static func star(under x: CGFloat) -> Int { min(5, max(1, Int(x / (cell + gap)) + 1)) }
 
     /// Stars for a point along the strip: left of the first star's middle is none, past the last is five.
     static func stars(at x: CGFloat) -> Int {

@@ -50,6 +50,7 @@ struct FilmstripView: View {
             .onAppear { follow(proxy, animated: false) }
             .onChange(of: m.current) { _, _ in follow(proxy, animated: true) }
             .onChange(of: m.shownPhotos.count) { _, _ in follow(proxy, animated: false) }
+            .onChange(of: imageHeight) { _, _ in follow(proxy, animated: false) }     // cells resized: keep it centred
         }
         .background(Color.black.opacity(0.25))
     }

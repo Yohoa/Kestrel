@@ -436,9 +436,10 @@ final class Model: ObservableObject {
     @Published var viewSize = CGSize(width: 800, height: 600) {
         didSet {
             // a bigger window or another screen: render the photo on screen again at the size it now needs
+            // only the picture, and only when it needs more pixels than it has (a smaller one is just scaled down)
             let before = Int((Double(max(oldValue.width, oldValue.height)) * backing / 512).rounded(.up))
             let after = Int((Double(max(viewSize.width, viewSize.height)) * backing / 512).rounded(.up))
-            if before != after, viewMode == .single, current != nil { scheduleRefresh() }
+            if after > before, viewMode == .single, current != nil { schedulePreviewRefresh() }
         }
     }
     private var panStart = CGSize.zero
@@ -785,6 +786,17 @@ final class Model: ObservableObject {
     private var refreshTask: Task<Void, Never>?
 
     /// Holding → must not queue a decode per photo: only the photo you stop on is rendered.
+    private var previewRefreshTask: Task<Void, Never>?
+    /// After the window grew: the picture again at the size it now needs, once the resize settles.
+    func schedulePreviewRefresh() {
+        previewRefreshTask?.cancel()
+        previewRefreshTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 250_000_000)
+            guard !Task.isCancelled else { return }
+            self?.refreshPreview()
+        }
+    }
+
     func scheduleRefresh() {
         refreshTask?.cancel()
         refreshTask = Task { [weak self] in
@@ -966,9 +978,9 @@ final class Model: ObservableObject {
     func nudgeExposure(_ delta: Double) {
         // to 0.01 EV — the whole sum, not only the step (that kept ⌥= at +0.34 for ever). A value on a third of a
         // stop stays on it (0.33, 0.67, 1.00, not 0.99), so ⅓ EV steps add up; an Auto EV value like −1.27 stays as it is.
-        var v = exposure + delta
+        var v = min(max(exposure + delta, -4), 7)          // the slider's range
         if abs(v * 3 - (v * 3).rounded()) < 0.05 { v = (v * 3).rounded() / 3 }
-        exposure = (v * 100).rounded() / 100
+        exposure = (v * 100).rounded() / 100 + 0           // + 0: no "−0.00"
         refreshAll()
     }
 
@@ -2519,12 +2531,12 @@ final class Model: ObservableObject {
         let b = baked(pk)
         let s = RenderScheduler.shared
 
-        if let h = histCache[pk] { hist = h } else {
+        if let h = histCache[pk.content] { hist = h } else {
             s.aux(photoGen: gen) { [weak self] in
                 let h = b.makeHistogram()
                 self?.post { [weak self] in
                     guard let self else { return }
-                    if let h { self.histCache[pk] = h }
+                    if let h { self.histCache[pk.content] = h }
                     if self.currentPhotoKey == pk { self.hist = h }
                 }
             }
@@ -2544,7 +2556,7 @@ final class Model: ObservableObject {
             }
         }
 
-        let tk = ThumbKey(photo: pk, looksVersion: looksVersion)
+        let tk = ThumbKey(photo: pk.content, looksVersion: looksVersion)
         if let t = thumbCache[tk] { thumbs = t } else {
             let order = thumbOrder()
             s.aux(photoGen: gen) { [weak self] in
@@ -2591,8 +2603,8 @@ final class Model: ObservableObject {
         let order = thumbOrder()
         for n in candidates {
             let key = previewKey(n)
-            let tk = ThumbKey(photo: key.photo, looksVersion: looksVersion)
-            if previewCache.contains(key) && histCache.contains(key.photo) && thumbCache.contains(tk) { continue }
+            let tk = ThumbKey(photo: key.photo.content, looksVersion: looksVersion)
+            if previewCache.contains(key) && histCache.contains(key.photo.content) && thumbCache.contains(tk) { continue }
             let b = baked(key.photo)
             s.aux(stillWanted: { s.isNeighbour(n) }) { [weak self] in
                 guard let self else { return }
@@ -2608,8 +2620,8 @@ final class Model: ObservableObject {
                 }
                 s.yieldToPreview()
                 guard s.isNeighbour(n) else { return }
-                if !self.histCache.contains(key.photo), let h = b.makeHistogram() {
-                    self.histCache[key.photo] = h
+                if !self.histCache.contains(key.photo.content), let h = b.makeHistogram() {
+                    self.histCache[key.photo.content] = h
                     self.post { [weak self] in
                         guard let self, self.currentPhotoKey == key.photo, self.hist == nil else { return }
                         self.hist = h

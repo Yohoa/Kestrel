@@ -114,6 +114,10 @@ struct PhotoKey: Hashable {
     /// The long side, in screen pixels, the fitted picture needs (0: the old fixed quarter size). Part of the key:
     /// a bigger window or another screen is a new render; the picture's own size is only known when it is decoded.
     var target: Int = 0
+
+    /// The same photo and settings whatever the preview size: the key for what doesn't depend on it
+    /// (histogram, look thumbnails), so a window resize doesn't redo them.
+    var content: PhotoKey { PhotoKey(url: url, adj: adj) }
 }
 
 struct PreviewKey: Hashable {

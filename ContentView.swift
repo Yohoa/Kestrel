@@ -60,6 +60,10 @@ struct ContentView: View {
                 NotificationCenter.default.addObserver(forName: NSWindow.didResizeNotification, object: w, queue: .main) { _ in
                     MainActor.assumeIsolated { m.layoutStore.fitToWindow() }      // narrow window: shrink, then fold columns
                 }
+                // moved to a screen with another pixel density: the picture needs another size
+                NotificationCenter.default.addObserver(forName: NSWindow.didChangeBackingPropertiesNotification, object: w, queue: .main) { _ in
+                    MainActor.assumeIsolated { m.schedulePreviewRefresh() }
+                }
             }
             DispatchQueue.main.async { m.layoutStore.fitToWindow() }
             // Small enough for an iPad as a Sidecar display or a split screen: the side columns shrink, then fold.
