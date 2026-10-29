@@ -8,6 +8,7 @@ Newest first. Dates are when the change was made.
 
 ## Unreleased (since 1.5.3)
 
+- **Sharp fitted photos on big screens**: the fitted picture used to be decoded at a quarter of the photo's size whatever the screen, so on a 4K display a 10 MP APS-C crop (3936 × 2624 → 984 px) was enlarged 2.6×. It is now decoded at the size the picture area needs (a quarter at least, full size at most), and again when the window grows. Measured on a 24 MP ARW: 75 ms instead of 57 ms for a 4K-sized picture. Slider drags render at half that size so they stay fluid.
 - **Splitters**: the gaps beside the side columns are as narrow as the window's edge (3 pt instead of 8), while the handle in them is wider than it looks (18 pt, reaching into the picture side) for a finger or a Pencil. Two fingers on a trackpad, or a finger on an iPad as a Sidecar display, drag a handle too.
 - **A handle above the filmstrip**: drag it to make the filmstrip taller or shorter (remembered); double-click for the usual height. The thumbnails grow and shrink with it, and are read sharper (760 px instead of 360) so a tall strip and large grid cells stay crisp.
 - **Notices** have a solid frosted backing (clear glass let a bright photo or the LUT thumbnails show through the words), and the "27 LUTs loaded" notice no longer appears at every launch.

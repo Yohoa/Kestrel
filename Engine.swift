@@ -430,6 +430,13 @@ enum BitmapPhoto {
 
     static func isBitmap(_ url: URL) -> Bool { bitmapExtensions.contains(url.pathExtension.lowercased()) }
 
+    static func longSide(_ url: URL) -> Int? {
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let p = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
+              let w = p[kCGImagePropertyPixelWidth] as? Int, let h = p[kCGImagePropertyPixelHeight] as? Int else { return nil }
+        return max(w, h)
+    }
+
     static func decode(_ url: URL, adj: Adjust, scale: Float) -> CIImage? {
         Storage.warmWholeFile(url)
         guard let img = scale < 0.999 ? reduced(url, scale: scale)

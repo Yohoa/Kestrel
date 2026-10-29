@@ -433,7 +433,14 @@ final class Model: ObservableObject {
     @Published var zoomImage: NSImage?
     private var zoomImageScale = 0.0
     private var pinchRender: DispatchWorkItem?
-    @Published var viewSize = CGSize(width: 800, height: 600)
+    @Published var viewSize = CGSize(width: 800, height: 600) {
+        didSet {
+            // a bigger window or another screen: render the photo on screen again at the size it now needs
+            let before = Int((Double(max(oldValue.width, oldValue.height)) * backing / 512).rounded(.up))
+            let after = Int((Double(max(viewSize.width, viewSize.height)) * backing / 512).rounded(.up))
+            if before != after, viewMode == .single, current != nil { scheduleRefresh() }
+        }
+    }
     private var panStart = CGSize.zero
     private var dragging = false
 
@@ -2403,7 +2410,15 @@ final class Model: ObservableObject {
         startPreview(url, gen: RenderScheduler.shared.bumpPreview(), transient: transient)
     }
 
-    private func photoKey(_ url: URL) -> PhotoKey { PhotoKey(url: url, adj: state(for: url).adjust) }
+    private func photoKey(_ url: URL) -> PhotoKey { PhotoKey(url: url, adj: state(for: url).adjust, target: fitTarget) }
+
+    /// The long side, in screen pixels, of the picture area: what a fitted picture has to fill to be sharp (a 4K
+    /// screen needs ~2600 px where a quarter-size decode of a 10 MP crop gave 984). In steps of 512, so a small
+    /// resize of the window keeps the renders it has.
+    var fitTarget: Int {
+        let px = Double(max(viewSize.width, viewSize.height)) * backing
+        return max(1024, Int((px / 512).rounded(.up)) * 512)
+    }
 
     private func previewKey(_ url: URL, lookID: Int? = nil) -> PreviewKey {
         PreviewKey(photo: photoKey(url), lookID: lookID ?? ppID, looksVersion: looksVersion, over: showOver, under: showUnder)
@@ -2414,8 +2429,8 @@ final class Model: ObservableObject {
 
     /// `transient` (slider drag frames): neither cached nor evicting the neighbours' bakes.
     private func baked(_ key: PhotoKey, transient: Bool = false) -> BakedPhoto {
-        if let b = bakeCache[key] { return b }
-        let b = BakedPhoto(key: key)
+        if !transient, let b = bakeCache[key] { return b }
+        let b = BakedPhoto(key: key, draft: transient)
         if !transient { bakeCache[key] = b }
         return b
     }

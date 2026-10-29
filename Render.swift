@@ -74,6 +74,13 @@ final class RAWSource {
         return base.map { ($0.temp, $0.tint) }
     }
 
+    /// The picture's long side at full size, in pixels.
+    var nativeLongSide: Int? {
+        lock.lock(); defer { lock.unlock() }
+        guard prepare(), let f = filter else { return nil }
+        return Int(max(f.nativeSize.width, f.nativeSize.height))
+    }
+
     private func prepare() -> Bool {
         if filter != nil { return true }
         Storage.warmWholeFile(url)                       // slow storage: one big read, not thousands of small ones
@@ -104,6 +111,9 @@ final class RAWSource {
 struct PhotoKey: Hashable {
     let url: URL
     let adj: Adjust
+    /// The long side, in screen pixels, the fitted picture needs (0: the old fixed quarter size). Part of the key:
+    /// a bigger window or another screen is a new render; the picture's own size is only known when it is decoded.
+    var target: Int = 0
 }
 
 struct PreviewKey: Hashable {
@@ -117,7 +127,11 @@ struct PreviewKey: Hashable {
 /// One photo decoded at `scale` and baked to bitmaps, shared by everything that shows it.
 final class BakedPhoto {
     let key: PhotoKey
-    let scale: Float
+    /// Decode scale: set from the picture's real size at the first decode (see `key.target`).
+    private(set) var scale: Float
+    private var scaleChosen = false
+    /// Slider-drag frames: half the size, so dragging stays fluid on a big screen.
+    private let draft: Bool
     private(set) var asShot: (temp: Float, tint: Float)?
     private var display: CIImage?
     private var scene: CIImage?
@@ -128,7 +142,19 @@ final class BakedPhoto {
     static let thumbScale: Float = 0.06        // 360 px wide: the LUT panel's widest cell at 2x
     static let histScale: Float = 0.1
 
-    init(key: PhotoKey, scale: Float = 0.25) { self.key = key; self.scale = scale }
+    init(key: PhotoKey, scale: Float = 0.25, draft: Bool = false) { self.key = key; self.scale = scale; self.draft = draft }
+
+    /// The smallest decode that still fills `key.target` pixels (never below a quarter, never above full size).
+    /// Called under the lock, off the main thread: finding the size opens the file.
+    private func chooseScale() {
+        guard !scaleChosen else { return }
+        scaleChosen = true
+        guard key.target > 0 else { return }
+        let native = BitmapPhoto.isBitmap(key.url) ? BitmapPhoto.longSide(key.url) : RAWSource.for(key.url).nativeLongSide
+        guard let n = native, n > 0 else { return }
+        let want = Float(key.target) / Float(n) * (draft ? 0.5 : 1)
+        scale = min(1, max(0.25, want))
+    }
 
     /// Renders a Core Image graph to a half-float linear bitmap and wraps it as a new, flat image.
     static func bake(_ img: CIImage) -> CIImage? {
@@ -137,6 +163,7 @@ final class BakedPhoto {
     }
 
     private func decode(scene wantScene: Bool) -> CIImage? {
+        chooseScale()
         let src = RAWSource.for(key.url)
         if asShot == nil { asShot = src.asShot }
         return src.bake(key.adj, scale: scale, scene: wantScene)
