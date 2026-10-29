@@ -133,7 +133,9 @@ final class LayoutStore: ObservableObject {
     static let foldThreshold: Double = 170
 
     /// The filmstrip's height, set with the handle above it.
-    @Published var filmstripHeight: Double = LayoutStore.clampFilmstrip(LayoutStore.load("filmstripHeight", LayoutStore.defaultFilmstrip)) {
+    // read on its own: `load` clamps to the column widths (a 111 pt strip came back at the minimum column width)
+    @Published var filmstripHeight: Double = LayoutStore.clampFilmstrip(
+        UserDefaults.standard.object(forKey: "filmstripHeight") as? Double ?? LayoutStore.defaultFilmstrip) {
         didSet { UserDefaults.standard.set(filmstripHeight, forKey: "filmstripHeight") }
     }
     static let defaultFilmstrip: Double = 128
