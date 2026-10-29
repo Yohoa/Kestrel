@@ -964,7 +964,11 @@ final class Model: ObservableObject {
     }
 
     func nudgeExposure(_ delta: Double) {
-        exposure = (exposure + delta * 100).rounded() / 100
+        // to 0.01 EV — the whole sum, not only the step (that kept ⌥= at +0.34 for ever). A value on a third of a
+        // stop stays on it (0.33, 0.67, 1.00, not 0.99), so ⅓ EV steps add up; an Auto EV value like −1.27 stays as it is.
+        var v = exposure + delta
+        if abs(v * 3 - (v * 3).rounded()) < 0.05 { v = (v * 3).rounded() / 3 }
+        exposure = (v * 100).rounded() / 100
         refreshAll()
     }
 
