@@ -439,6 +439,7 @@ final class Model: ObservableObject {
             // only the picture, and only when it needs more pixels than it has (a smaller one is just scaled down)
             let before = Int((Double(max(oldValue.width, oldValue.height)) * backing / 512).rounded(.up))
             let after = Int((Double(max(viewSize.width, viewSize.height)) * backing / 512).rounded(.up))
+            if after != before { sizeCaches() }
             if after > before, viewMode == .single, current != nil { schedulePreviewRefresh() }
         }
     }
@@ -598,6 +599,7 @@ final class Model: ObservableObject {
         restoreBatchLooks()                          // the built-in ones now, LUTs again when their folder has loaded
         installKeyMonitor()
         LocalCache.trim()
+        sizeCaches()
         ClipboardFiles.trim()
         undo.onApply = { [weak self] label, redo in
             self?.notify(.undoRedo, (redo ? "Redid " : "Undid ") + label, icon: redo ? "arrow.uturn.forward" : "arrow.uturn.backward")
@@ -2435,6 +2437,15 @@ final class Model: ObservableObject {
     var fitTarget: Int {
         let px = Double(max(viewSize.width, viewSize.height)) * backing
         return max(1024, Int((px / 512).rounded(.up)) * 512)
+    }
+
+    /// How many decoded photos and finished previews to keep, from what one of them weighs at this size: about
+    /// 300 MB of bakes (display + scene, 16 bytes a pixel together) and 120 MB of previews (RGBA, 4 bytes), at a
+    /// 3:2 picture. Never fewer than the photo on screen and its two neighbours, never more than before.
+    func sizeCaches() {
+        let px = Double(fitTarget) * Double(fitTarget) / 1.5
+        bakeCache.setLimit(min(8, max(3, Int(300e6 / (px * 16)))))
+        previewCache.setLimit(min(12, max(3, Int(120e6 / (px * 4)))))
     }
 
     private func previewKey(_ url: URL, lookID: Int? = nil) -> PreviewKey {

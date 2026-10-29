@@ -21,6 +21,7 @@ final class ThumbStore: ObservableObject {
     private var ops: [URL: Operation] = [:]
 
     func ensure(_ url: URL) {
+        onScreen.insert(url)
         guard images[url] == nil, requested.insert(url).inserted else { return }
         let op = BlockOperation { [weak self] in
             let img = ThumbStore.makeThumb(url)
@@ -37,8 +38,20 @@ final class ThumbStore: ObservableObject {
         queue.addOperation(op)
     }
 
+    private func trim() {
+        guard images.count > Self.keep else { return }
+        var drop = images.count - Self.keep
+        var kept: [URL] = []
+        for u in arrivedOrder {
+            if drop > 0, !onScreen.contains(u), images[u] != nil { images[u] = nil; requested.remove(u); drop -= 1 }
+            else if images[u] != nil { kept.append(u) }
+        }
+        arrivedOrder = kept
+    }
+
     /// The cell scrolled away before its thumbnail was read: don't read it (it is asked for again if it comes back).
     func forget(_ url: URL) {
+        onScreen.remove(url)
         guard let op = ops.removeValue(forKey: url), !op.isExecuting, !op.isFinished else { return }
         op.cancel()
         requested.remove(url)
@@ -54,13 +67,21 @@ final class ThumbStore: ObservableObject {
             MainActor.assumeIsolated {
                 guard let self else { return }
                 self.images.merge(self.pending) { _, new in new }
+                self.arrivedOrder.append(contentsOf: self.pending.keys)
                 self.pending = [:]
+                self.trim()
             }
         }
     }
 
-    /// Sharp up to a tall filmstrip (320 pt: ~380 pt wide pictures, 760 px on a Retina screen) and large grid cells.
-    nonisolated static let maxPixels = 760
+    /// Sharp for the filmstrip at its usual heights and for grid cells up to ~256 pt on a Retina screen; at 760 px
+    /// each kept thumbnail weighed ~1.5 MB and a big folder ran to gigabytes.
+    nonisolated static let maxPixels = 512
+    /// Thumbnails kept in memory; beyond this the ones longest out of view go (they come back from the disk cache
+    /// or the file when scrolled to again).
+    static let keep = 300
+    private var onScreen: Set<URL> = []
+    private var arrivedOrder: [URL] = []
 
     nonisolated static func makeThumb(_ url: URL) -> NSImage? {
         let slow = Storage.isSlow(url)

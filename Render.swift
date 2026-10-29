@@ -19,10 +19,17 @@ import AppKit
 final class LRU<Key: Hashable, Value> {
     private var dict: [Key: Value] = [:]
     private var order: [Key] = []
-    private let limit: Int
+    private var limit: Int
     private let lock = NSLock()
 
     init(limit: Int) { self.limit = limit }
+
+    /// Fewer entries when each one is bigger (the previews follow the screen size): drops the oldest at once.
+    func setLimit(_ n: Int) {
+        lock.lock(); defer { lock.unlock() }
+        limit = max(1, n)
+        while order.count > limit, let old = order.first { order.removeFirst(); dict[old] = nil }
+    }
 
     subscript(key: Key) -> Value? {
         get {
@@ -229,9 +236,16 @@ final class BakedPhoto {
         return h
     }
 
+    /// From a copy of at most 2048 px on the long side: the overlay is a coarse red / blue mask drawn over the
+    /// picture, and at full preview size it took ~16 bytes a pixel and a CPU pass over millions of pixels.
     func makeOverlay(over: Bool, under: Bool) -> NSImage? {
         guard let full = sceneImage() else { return nil }
-        return ClippingOverlay.make(sceneLinear: full, url: key.url, over: over, under: under)
+        let long = max(full.extent.width, full.extent.height)
+        guard long > 2048 else { return ClippingOverlay.make(sceneLinear: full, url: key.url, over: over, under: under) }
+        let s = 2048 / long
+        let small = full.applyingFilter("CILanczosScaleTransform", parameters: ["inputScale": s, "inputAspectRatio": 1.0])
+            .cropped(to: CGRect(x: 0, y: 0, width: (full.extent.width * s).rounded(.down), height: (full.extent.height * s).rounded(.down)))
+        return ClippingOverlay.make(sceneLinear: small, url: key.url, over: over, under: under)
     }
 }
 

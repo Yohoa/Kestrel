@@ -104,7 +104,7 @@ enum LocalCache {
     static let dir: URL = {
         let base = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask)[0]
         let d = base.appendingPathComponent("Kestrel", isDirectory: true)
-        try? FileManager.default.createDirectory(at: d.appendingPathComponent("thumbs760"), withIntermediateDirectories: true)
+        try? FileManager.default.createDirectory(at: d.appendingPathComponent("thumbs512"), withIntermediateDirectories: true)
         try? FileManager.default.createDirectory(at: d.appendingPathComponent("exif"), withIntermediateDirectories: true)
         return d
     }()
@@ -126,14 +126,14 @@ enum LocalCache {
 
     static func thumb(_ url: URL) -> NSImage? {
         guard let k = key(url) else { return nil }
-        let f = dir.appendingPathComponent("thumbs760/\(k).jpg")
+        let f = dir.appendingPathComponent("thumbs512/\(k).jpg")
         guard let src = CGImageSourceCreateWithURL(f as CFURL, nil), let cg = CGImageSourceCreateImageAtIndex(src, 0, nil) else { return nil }
         return NSImage(cgImage: cg, size: .zero)
     }
 
     static func storeThumb(_ cg: CGImage, for url: URL) {
         guard let k = key(url) else { return }
-        let f = dir.appendingPathComponent("thumbs760/\(k).jpg")
+        let f = dir.appendingPathComponent("thumbs512/\(k).jpg")
         guard let d = CGImageDestinationCreateWithURL(f as CFURL, UTType.jpeg.identifier as CFString, 1, nil) else { return }
         CGImageDestinationAddImage(d, cg, [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)
         CGImageDestinationFinalize(d)
@@ -160,9 +160,9 @@ enum LocalCache {
         DispatchQueue.global(qos: .background).async {
             let keys: [URLResourceKey] = [.fileSizeKey, .contentModificationDateKey]
             let fm = FileManager.default
-            try? fm.removeItem(at: dir.appendingPathComponent("thumbs"))     // 1.5.3 and older: 360 px thumbnails
+            for old in ["thumbs", "thumbs760"] { try? fm.removeItem(at: dir.appendingPathComponent(old)) }   // other sizes
             var files: [(URL, Int, Date)] = []
-            for sub in ["thumbs760", "exif"] {
+            for sub in ["thumbs512", "exif"] {
                 for f in (try? fm.contentsOfDirectory(at: dir.appendingPathComponent(sub), includingPropertiesForKeys: keys)) ?? [] {
                     let v = try? f.resourceValues(forKeys: Set(keys))
                     files.append((f, v?.fileSize ?? 0, v?.contentModificationDate ?? .distantPast))
