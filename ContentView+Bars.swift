@@ -124,11 +124,7 @@ extension ContentView {
     var ratingControls: some View {
         let p = m.photo(m.current)
         return HStack(spacing: 2) {
-            ForEach(1...5, id: \.self) { i in
-                Button { m.setRating(i) } label: {
-                    hitTarget(Image(systemName: i <= (p?.rating ?? 0) ? "star.fill" : "star").font(.system(size: 11)).foregroundStyle(.orange), width: 14)
-                }.buttonStyle(.plain).help("\(i) star\(i == 1 ? "" : "s") (\(i)); 0 clears")
-            }
+            StarStrip(rating: max(p?.rating ?? 0, 0)) { m.setRating($0) }
             Button { m.setRating(-1) } label: {
                 hitTarget(Image(systemName: p?.isRejected == true ? "xmark.circle.fill" : "xmark.circle").foregroundStyle(.red), width: 18)
             }.buttonStyle(.plain).help("Reject (X)")
@@ -232,5 +228,49 @@ extension ContentView {
         }
         .padding(16)
         .frame(width: 600, height: 520)
+    }
+}
+
+/// The five stars in the status bar. A click sets that many; a drag along them sets the rating where it is let go,
+/// and dragging off the left of the first star clears it (no other way to get back to no stars without a key).
+struct StarStrip: View {
+    let rating: Int
+    let set: (Int) -> Void
+    final class Box: ObservableObject {
+        @Published var preview: Int?            // the rating under the pointer while dragging
+        var dragEnded = Date.distantPast        // a drag let go over a star is not also a click on it
+    }
+    @StateObject private var box = Box()
+    static let cell: CGFloat = 14, gap: CGFloat = 2
+
+    var body: some View {
+        let shown = box.preview ?? rating
+        HStack(spacing: Self.gap) {
+            ForEach(1...5, id: \.self) { i in
+                Button { if Date().timeIntervalSince(box.dragEnded) > 0.3 { set(i) } } label: {
+                    Image(systemName: i <= shown ? "star.fill" : "star").font(.system(size: 11)).foregroundStyle(.orange)
+                        .opacity(box.preview != nil && i > shown ? 0.45 : 1)
+                        .frame(minWidth: Self.cell, minHeight: 34).contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                .help("\(i) star\(i == 1 ? "" : "s") (\(i)). Drag along the stars to set, off the left end to clear (0)")
+            }
+        }
+        // a drag, not a click: the buttons keep their clicks
+        .simultaneousGesture(DragGesture(minimumDistance: 4).onChanged { g in
+            box.preview = Self.stars(at: g.location.x)
+        }.onEnded { g in
+            let r = Self.stars(at: g.location.x)
+            box.preview = nil
+            box.dragEnded = Date()
+            if r != rating { set(r) }
+        })
+    }
+
+    /// Stars for a point along the strip: left of the first star's middle is none, past the last is five.
+    static func stars(at x: CGFloat) -> Int {
+        let stride = cell + gap
+        guard x >= cell / 2 else { return 0 }
+        return min(5, max(1, Int((x / stride).rounded(.up))))
     }
 }

@@ -8,6 +8,7 @@ Newest first. Dates are when the change was made.
 
 ## Unreleased (since 1.5.3)
 
+- **Stars in the status bar can be dragged**: drag along them to set the rating where you let go, or off the left end of the first star to clear it (no stars). A click still sets that many.
 - **Panels in their own window** no longer have an empty band under the title bar: the panel's header sits beside the window buttons.
 - **Status bar in a narrow window**: the white-balance menu no longer slides under the stars; buttons and menus keep their size, the file name shortens, and the image size, photo count and status text step aside whole when there is no room (no cut-off "6…" or a count wrapped onto two lines).
 
