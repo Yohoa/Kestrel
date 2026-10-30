@@ -8,6 +8,7 @@ Newest first. Dates are when the change was made.
 
 ## Unreleased (since 1.5.3)
 
+- **Page Up / Page Down** (fn ↑ / fn ↓ on a laptop): in the grid a screenful of rows up or down, in the same column; in single view the previous / next photo. ⇧ extends the selection.
 - **HEIC / HEIF** photos open like JPGs: .heic, .heif and Sony's .HIF (A7 IV, A1, A7R V, ZV-E1 …), 8- or 10-bit. A RAW + HEIF pair shows once, as the RAW, and the HEIF goes along when the RAW is moved to _Rejected.
 - **Undo Sony's Exposure Std. Adjust** (Settings ▸ Exposure, off by default): a photo shot with it set (MakerNote tag 0x202D, e.g. −1 EV) starts with the opposite exposure (+1 EV), and opening it saves that to its .xmp. Photos that already have an exposure from Kestrel, FastRawViewer or Lightroom are left alone. Switching it on or off re-reads the folder. The EXIF box shows the camera's setting for Sony photos ("Std. adj.  −1.0 EV" or "Off").
 - **Rotate** photos a quarter turn: ⌘[ / ⌘] (as in Lightroom), the Photo menu, or right-click. In the grid it turns the selected photos, one undo step. The turn is saved in the sidecar as `tiff:Orientation`, so FastRawViewer, Lightroom and Bridge show it the same way, and a turn they saved shows here. Thumbnails, the picture, zoom, histogram, white balance picker, export and ⌘C all follow it; ⌘V and Reset leave it alone.

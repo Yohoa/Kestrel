@@ -14,6 +14,7 @@ enum Shortcuts {
             ("Return", "Grid → the photo in single view; single view → back to the grid"),
             ("Swipe, flick", "Two fingers sideways, or a quick sideways drag, on the photo: previous / next"),
             ("Home  End", "First / last photo"),
+            ("Page Up  Page Down", "Grid: a screenful up / down, same column. Single view: previous / next photo. With ⇧: extends the selection"),
             ("↑ ↓", "One row up / down in the grid"),
             ("G", "Image grid ↔ single image"),
             ("Double-click", "Open the photo in single view (grid)"),
@@ -155,6 +156,10 @@ extension Model {
             if shift { extendSelection(d) } else { step(d) }; return true
         case 126:                                                                     // ↑
             let d = viewMode == .grid ? -gridColumns : -1
+            if shift { extendSelection(d) } else { step(d) }; return true
+        case 116, 121:                                                    // Page Up / Page Down
+            // grid: a screenful of rows, same column; single view: the previous / next photo
+            let d = (viewMode == .grid ? gridColumns * gridRows : 1) * (e.keyCode == 116 ? -1 : 1)
             if shift { extendSelection(d) } else { step(d) }; return true
         case 115: goFirst(); return true                                  // Home
         case 119: goLast(); return true                                   // End

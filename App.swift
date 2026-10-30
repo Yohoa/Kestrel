@@ -351,6 +351,7 @@ final class Model: ObservableObject {
         didSet { UserDefaults.standard.set(gridCell, forKey: "gridCell") }
     }
     @Published var gridColumns = 4
+    var gridRows = 3                                // rows that fit in the grid's view: Page Up / Down move this many
 
     // Look
     @Published var ppID = 0                         // Base: what the camera recorded, no look added

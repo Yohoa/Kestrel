@@ -308,15 +308,18 @@ extension ContentView {
                     DispatchQueue.main.async { proxy.scrollTo(c, anchor: .center) }   // after the grid's first layout
                 }
             }
-            .onAppear { updateColumns(geo.size.width) }
-            .onChange(of: geo.size.width) { _, w in updateColumns(w) }
-            .onChange(of: m.gridCell) { _, _ in updateColumns(geo.size.width) }
+            .onAppear { updateColumns(geo.size) }
+            .onChange(of: geo.size) { _, s in updateColumns(s) }
+            .onChange(of: m.gridCell) { _, _ in updateColumns(geo.size) }
         }
         .background(Color.black.opacity(m.stageOpacity))
     }
 
-    func updateColumns(_ width: CGFloat) {
-        m.gridColumns = max(1, Int((width - 16) / (m.gridCell + 14)))
+    func updateColumns(_ size: CGSize) {
+        let cols = max(1, Int((size.width - 16) / (m.gridCell + 14)))
+        if cols != m.gridColumns { m.gridColumns = cols }
+        // a cell: the picture (72 % of its width), the name, padding and the row spacing
+        m.gridRows = max(1, Int((size.height - 16) / (m.gridCell * 0.72 + 31)))
     }
 
 }
