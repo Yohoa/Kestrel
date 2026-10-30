@@ -538,7 +538,8 @@ final class Model: ObservableObject {
     @Published var hiddenPanels: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "hiddenPanels") ?? [Panel.stats.rawValue]) {
         didSet { UserDefaults.standard.set(Array(hiddenPanels), forKey: "hiddenPanels") }
     }
-    @Published var lutColumns = max(2, min(3, UserDefaults.standard.integer(forKey: "lutColumns") == 0 ? 3 : UserDefaults.standard.integer(forKey: "lutColumns"))) {
+    /// LUT thumbnail size: 2 large, 3 medium, 4 small.
+    @Published var lutColumns = max(2, min(4, UserDefaults.standard.integer(forKey: "lutColumns") == 0 ? 3 : UserDefaults.standard.integer(forKey: "lutColumns"))) {
         didSet { UserDefaults.standard.set(lutColumns, forKey: "lutColumns") }
     }
     @Published var favorites: [URL] = Model.loadHistory("favoriteFolders")
@@ -3043,7 +3044,7 @@ final class Model: ObservableObject {
                     let look = jobs[0].look, size = rendered[0].size
                     let dims = "\(Int(size.width)) × \(Int(size.height))"
                     self.status = "Copied the edited \(first) · \(look.title) (\(dims), \(format.title) \(mb)) to the clipboard"
-                    self.notify(.copyPhoto, "Edited photo copied · \(look.title) · \(dims) · \(format.title) \(mb)", icon: "doc.on.doc")
+                    self.showClipFinished("Copied \(first) · \(look.title) · \(format.title) \(mb)")   // the same green capsule
                 }
             }
         }

@@ -193,7 +193,7 @@ final class LayoutStore: ObservableObject {
         setWidth(left: true, s.leftWidth)               // clamped to this window, so the picture keeps its room
         setWidth(left: false, s.rightWidth)
         fitToWindow()
-        m.lutColumns = min(max(s.lutColumns, 2), 3)
+        m.lutColumns = min(max(s.lutColumns, 2), 4)
         let wantDetached = Set(s.detached ?? [])
         for p in Panel.allCases where m.shown(p) {
             let want = wantDetached.contains(p.rawValue)

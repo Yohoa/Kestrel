@@ -119,7 +119,8 @@ struct SettingsView: View {
             Section("Looks") {
                 Picker("LUT thumbnails", selection: $m.lutColumns) {
                     Text("Large").tag(2)
-                    Text("Small").tag(3)
+                    Text("Medium").tag(3)
+                    Text("Small").tag(4)
                 }
                 .pickerStyle(.segmented)
                 Toggle("Show favourite looks only", isOn: $m.favoriteLooksOnly)

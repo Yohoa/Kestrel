@@ -159,7 +159,7 @@ extension ContentView {
             VStack(spacing: 0) {
                 ScrollView {
                     // Adapts to the column width: as many cells per row as fit (thumbnail size from the gear menu)
-                    LazyVGrid(columns: [GridItem(.adaptive(minimum: m.lutColumns == 2 ? 160 : 104), spacing: 6)], spacing: 8) {
+                    LazyVGrid(columns: [GridItem(.adaptive(minimum: m.lutColumns == 2 ? 160 : m.lutColumns == 3 ? 104 : 72), spacing: 6)], spacing: 8) {
                         ForEach(m.visibleLooks) { look in lookCell(look) }
                     }
                     .padding(8)
@@ -206,7 +206,8 @@ extension ContentView {
         Menu {
             Picker("Thumbnails", selection: $m.lutColumns) {
                 Text("Large").tag(2)
-                Text("Small").tag(3)
+                Text("Medium").tag(3)
+                Text("Small").tag(4)
             }
             Toggle("Favourites only", isOn: $m.favoriteLooksOnly)
             Divider()
