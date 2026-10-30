@@ -607,11 +607,6 @@ final class Model: ObservableObject {
         DispatchQueue.main.async { [weak self] in self?.applyTheme() }
         // Welcome on the first launch, a tip on later ones, once the window is on screen
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.6) { [weak self] in self?.showLaunchScreen() }
-        // a newer version found by the daily check opens the update sheet (not over another sheet)
-        updateSink = updater.$phase.sink { [weak self] p in
-            guard let self, case .available = p, self.sheet == nil || self.sheet == .tips else { return }
-            DispatchQueue.main.async { self.sheet = .update }
-        }
         DispatchQueue.main.asyncAfter(deadline: .now() + 4) { [weak self] in self?.updater.checkAtLaunch() }
         let torn = detachedPanels.compactMap(Panel.init(rawValue:))
         detachedPanels = []
@@ -2959,7 +2954,21 @@ final class Model: ObservableObject {
     /// its own look (as Export does with "each photo's own look"). Each one goes on the clipboard as a file and a
     /// picture, as Finder's own copy has: Finder pastes the files, Mail and Messages attach them, image apps take
     /// the pictures.
+    /// While several photos are being copied: how far it got (the progress shown with a ✕ to stop it).
+    @Published var clipProgress: (done: Int, total: Int)?
+    private var clipTask: Task<Void, Never>?
+    /// How the progress is shown: 0 a capsule over the picture, 1 in the status bar, 2 a panel at the top.
+    @Published var clipProgressStyle = UserDefaults.standard.integer(forKey: "copyProgressStyle")
+
+    func cancelClipboardCopy() {
+        clipTask?.cancel()
+        clipTask = nil
+        clipProgress = nil
+        status = "Copy to the clipboard stopped"
+    }
+
     func copyImageToClipboard() {
+        clipTask?.cancel()
         let many = viewMode == .grid && selection.count > 1
         let urls = many ? files.filter(selection.contains) : (current.map { [$0] } ?? [])
         guard !urls.isEmpty else { return }
@@ -2969,10 +2978,12 @@ final class Model: ObservableObject {
         let format = copyFormat, q = Float(quality)
         let first = urls[0].deletingPathExtension().lastPathComponent
         status = many ? "Rendering \(urls.count) photos for the clipboard…" : "Rendering \(first) for the clipboard…"
-        Task.detached(priority: .userInitiated) { [weak self] in
+        if many { clipProgress = (0, urls.count) }
+        clipTask = Task.detached(priority: .userInitiated) { [weak self] in
             // HEIC: the same 10-bit file Export writes; TIFF: 8-bit RGB without the alpha channel nobody uses
             var done: [(data: Data, file: URL?, size: CGSize)] = []
             for (k, j) in jobs.enumerated() {
+                if Task.isCancelled { return }
                 guard let img = j.dec.render(j.look) else { continue }
                 let data: Data?
                 switch format {
@@ -2985,12 +2996,19 @@ final class Model: ObservableObject {
                 done.append((data, ClipboardFiles.write(data, name: name), img.extent.size))
                 if many {
                     let n = k + 1
-                    await MainActor.run { self?.status = "Rendering for the clipboard… \(n) of \(jobs.count)" }
+                    await MainActor.run {
+                        guard !Task.isCancelled else { return }
+                        self?.clipProgress = (n, jobs.count)
+                        self?.status = "Rendering for the clipboard… \(n) of \(jobs.count)"
+                    }
                 }
             }
+            if Task.isCancelled { return }
             let rendered = done
             await MainActor.run {
                 guard let self else { return }
+                self.clipProgress = nil
+                self.clipTask = nil
                 guard !rendered.isEmpty else {
                     self.status = "Could not render \(many ? "the selected photos" : first)"
                     self.notify(.copyPhoto, self.status, icon: "exclamationmark.triangle")
