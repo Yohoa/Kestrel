@@ -119,7 +119,7 @@ extension ContentView {
                 .glassButton(prominent: true)
                 .help(m.exportOwnLook ? "Exports the \(m.exportScopeText) photos, each with its own look (rejected ones never). Export settings: ⚙︎"
                       : "Exports the \(m.exportScopeText) photos once per look ticked in the LUT panel (rejected ones never)")
-                .disabled(m.exportTargets.isEmpty || m.batchPPs.isEmpty || m.exporting || (m.outputMode.needsFolder && m.customOut == nil))
+                .disabled(m.exportTargets.isEmpty || m.exporting || (m.outputMode.needsFolder && m.customOut == nil))
             Button { m.sheet = .export } label: { Image(systemName: "gearshape") }.help("Export settings")
             Button { m.sheet = .help } label: { Image(systemName: "questionmark.circle") }.help("Keyboard shortcuts (F1)")
         }

@@ -1011,7 +1011,8 @@ final class Model: ObservableObject {
             notify(.copyPaste, status, icon: "exclamationmark.triangle")
             return
         }
-        let ts = actionTargets()
+        // single view without the filmstrip: the selection can't be seen, so only the photo on screen
+        let ts = viewMode == .single && !shown(.filmstrip) ? (current.map { [$0] } ?? []) : actionTargets()
         guard !ts.isEmpty else { return }
         let g = "paste-" + UUID().uuidString                    // one undo step for both edits
         edit(ts, group: g) { s in
@@ -2954,44 +2955,66 @@ final class Model: ObservableObject {
     }
 
     /// The photo on screen, rendered full size with its look, on the clipboard (to paste into a message or document).
+    /// ⌘C: the edited photo on screen; in the grid with several photos selected, every selected photo, each with
+    /// its own look (as Export does with "each photo's own look"). Each one goes on the clipboard as a file and a
+    /// picture, as Finder's own copy has: Finder pastes the files, Mail and Messages attach them, image apps take
+    /// the pictures.
     func copyImageToClipboard() {
-        guard let url = current else { return }
-        ensureRead([url])
-        let look = self.look
-        let dec = Decoded(url: url, adj: state(for: url).adjust, scale: 1)
-        let name = url.deletingPathExtension().lastPathComponent
+        let many = viewMode == .grid && selection.count > 1
+        let urls = many ? files.filter(selection.contains) : (current.map { [$0] } ?? [])
+        guard !urls.isEmpty else { return }
+        ensureRead(urls)
+        // the photo on screen with what it shows now; a selection with each photo's own saved look
+        let jobs = urls.map { u in (url: u, look: many ? ownLook(u) : look, dec: Decoded(url: u, adj: state(for: u).adjust, scale: 1)) }
         let format = copyFormat, q = Float(quality)
-        let fileName = "\(name)_\(look.fileName).\(format.rawValue)"
-        status = "Rendering \(name) for the clipboard…"
+        let first = urls[0].deletingPathExtension().lastPathComponent
+        status = many ? "Rendering \(urls.count) photos for the clipboard…" : "Rendering \(first) for the clipboard…"
         Task.detached(priority: .userInitiated) { [weak self] in
             // HEIC: the same 10-bit file Export writes; TIFF: 8-bit RGB without the alpha channel nobody uses
-            var data: Data?, size = CGSize.zero, file: URL?
-            if let img = dec.render(look) {
-                size = img.extent.size
+            var done: [(data: Data, file: URL?, size: CGSize)] = []
+            for (k, j) in jobs.enumerated() {
+                guard let img = j.dec.render(j.look) else { continue }
+                let data: Data?
                 switch format {
-                case .heic: data = try? Engine.heic10(img, look, quality: q)
-                case .jpg: data = Engine.jpeg(img, look, quality: q)
-                case .tiff: data = Engine.tiffRGB(img, look)
+                case .heic: data = try? Engine.heic10(img, j.look, quality: q)
+                case .jpg: data = Engine.jpeg(img, j.look, quality: q)
+                case .tiff: data = Engine.tiffRGB(img, j.look)
+                }
+                guard let data else { continue }
+                let name = "\(j.url.deletingPathExtension().lastPathComponent)_\(j.look.fileName).\(format.rawValue)"
+                done.append((data, ClipboardFiles.write(data, name: name), img.extent.size))
+                if many {
+                    let n = k + 1
+                    await MainActor.run { self?.status = "Rendering for the clipboard… \(n) of \(jobs.count)" }
                 }
             }
-            if let data { file = ClipboardFiles.write(data, name: fileName) }
+            let rendered = done
             await MainActor.run {
                 guard let self else { return }
-                guard let data else {
-                    self.status = "Could not render \(name)"
+                guard !rendered.isEmpty else {
+                    self.status = "Could not render \(many ? "the selected photos" : first)"
                     self.notify(.copyPhoto, self.status, icon: "exclamationmark.triangle")
                     return
                 }
-                // The file as well as the picture, as Finder's own copy has: Finder pastes the file, Mail and Messages
-                // attach it, image apps take the picture.
                 NSPasteboard.general.clearContents()
-                let item = NSPasteboardItem()
-                if let file { item.setString(file.absoluteString, forType: .fileURL) }
-                item.setData(data, forType: NSPasteboard.PasteboardType(format.type.identifier))
-                NSPasteboard.general.writeObjects([item])
-                let dims = "\(Int(size.width)) × \(Int(size.height))", mb = String(format: "%.1f MB", Double(data.count) / 1e6)
-                self.status = "Copied the edited \(name) · \(look.title) (\(dims), \(format.title) \(mb)) to the clipboard"
-                self.notify(.copyPhoto, "Edited photo copied · \(look.title) · \(dims) · \(format.title) \(mb)", icon: "doc.on.doc")
+                NSPasteboard.general.writeObjects(rendered.map { r in
+                    let item = NSPasteboardItem()
+                    if let file = r.file { item.setString(file.absoluteString, forType: .fileURL) }
+                    item.setData(r.data, forType: NSPasteboard.PasteboardType(format.type.identifier))
+                    return item
+                })
+                let mb = String(format: "%.1f MB", Double(rendered.reduce(0) { $0 + $1.data.count }) / 1e6)
+                if many {
+                    let missed = jobs.count - rendered.count
+                    self.status = "Copied \(rendered.count) edited photos, each with its own look (\(format.title), \(mb))"
+                        + (missed > 0 ? " · \(missed) could not be rendered" : "")
+                    self.notify(.copyPhoto, "\(rendered.count) edited photos copied · each with its own look · \(format.title) \(mb)", icon: "doc.on.doc")
+                } else {
+                    let look = jobs[0].look, size = rendered[0].size
+                    let dims = "\(Int(size.width)) × \(Int(size.height))"
+                    self.status = "Copied the edited \(first) · \(look.title) (\(dims), \(format.title) \(mb)) to the clipboard"
+                    self.notify(.copyPhoto, "Edited photo copied · \(look.title) · \(dims) · \(format.title) \(mb)", icon: "doc.on.doc")
+                }
             }
         }
     }
@@ -3033,15 +3056,16 @@ final class Model: ObservableObject {
 
     /// What a batch export writes for each photo: its own look, or every ticked look.
     func exportLooks(for jobs: [URL]) -> [URL: [PPLook]] {
-        if exportOwnLook { return Dictionary(uniqueKeysWithValues: jobs.map { ($0, [ownLook($0)]) }) }
         let ticked = looks.filter { batchPPs.contains($0.id) }
+        // nothing ticked: each photo's own look rather than nothing to export
+        if exportOwnLook || ticked.isEmpty { return Dictionary(uniqueKeysWithValues: jobs.map { ($0, [ownLook($0)]) }) }
         return Dictionary(uniqueKeysWithValues: jobs.map { ($0, ticked) })
     }
 
     /// The batch export button's title, e.g. "Export 120 shown" or "Export 12 selected × 3 looks".
     var exportAllTitle: String {
         let n = exportTargets.count
-        return exportOwnLook ? "Export \(n) \(exportScopeText)" : "Export \(n) \(exportScopeText) × \(batchPPs.count) look\(batchPPs.count == 1 ? "" : "s")"
+        return exportOwnLook || batchPPs.isEmpty ? "Export \(n) \(exportScopeText)" : "Export \(n) \(exportScopeText) × \(batchPPs.count) look\(batchPPs.count == 1 ? "" : "s")"
     }
 
     func exportAll() {

@@ -8,6 +8,9 @@ Newest first. Dates are when the change was made.
 
 ## Unreleased (since 1.5.3)
 
+- **Export with nothing ticked**: the Export button no longer needs a look ticked in the LUT panel; with "each photo's own look" (the default) the ticks were never used, and with nothing ticked each photo gets its own look.
+- **⌘C with several photos selected in the grid** copies all of them, each with its own look, as files and pictures (paste them in Finder, Mail, Messages …).
+- **⌘V in the single view with the filmstrip folded** pastes onto the photo on screen only (the selection can't be seen there); otherwise it still pastes onto the selection.
 - **Develop and White Balance**: Auto EV and Auto WB are buttons of their own (this photo); Auto EV's other choices (selection, every shown photo, metering) are in the small menu beside it, the white-balance presets in the menu beside Auto WB.
 - **Grid view: Space** marks or unmarks the current photo (as ⌘-click), **⇧Space** selects the range from the last marked photo to it (as ⇧-click); the single view keeps Space / ⇧Space = next / previous.
 - **Return** goes from the grid to the photo and from the single view back to the grid.
