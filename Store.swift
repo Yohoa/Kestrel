@@ -23,9 +23,9 @@ let rawExtensions: Set<String> = [
     "dcr",                              // Kodak
 ]
 
-/// JPGs are shown too, but only those without a RAW of the same name next to them (the camera's RAW + JPG pairs
-/// show once, as the RAW).
-let bitmapExtensions: Set<String> = ["jpg", "jpeg"]
+/// JPGs and HEIF files (.heic / .heif, and Sony's .hif from the A7 IV, A1, ZV-E1 …) are shown too, but only those
+/// without a RAW of the same name next to them (the camera's RAW + JPG / RAW + HEIF pairs show once, as the RAW).
+let bitmapExtensions: Set<String> = ["jpg", "jpeg", "heic", "heif", "hif"]
 
 struct Photo: Identifiable, Equatable {
     let url: URL

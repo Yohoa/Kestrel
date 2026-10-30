@@ -1554,7 +1554,7 @@ final class Model: ObservableObject {
         restoreName = streaming && restore == nil ? lastName : nil
         if found.isEmpty {
             let what = urls.first?.lastPathComponent ?? "the selection"
-            emptyHint = rec ? "No RAW or JPG files in \(what)." : "No RAW or JPG files directly in \(what)."
+            emptyHint = rec ? "No RAW, JPG or HEIF files in \(what)." : "No RAW, JPG or HEIF files directly in \(what)."
             status = emptyHint ?? ""
             select(nil)
         } else {
@@ -1941,7 +1941,7 @@ final class Model: ObservableObject {
         return r
     }
 
-    /// The camera's JPG of a RAW+JPG pair (same name, any case of .jpg / .jpeg), in the RAW's folder.
+    /// The camera's JPG or HEIF of a RAW+JPG / RAW+HEIF pair (same name, any case), in the RAW's folder.
     nonisolated static func jpgTwins(of raw: URL, in names: [String]) -> [URL] {
         guard rawExtensions.contains(raw.pathExtension.lowercased()) else { return [] }
         let dir = raw.deletingLastPathComponent(), stem = raw.deletingPathExtension().lastPathComponent.lowercased()

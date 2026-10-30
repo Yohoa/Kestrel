@@ -17,6 +17,8 @@
 			<array>
 				<string>public.camera-raw-image</string>
 				<string>public.jpeg</string>
+				<string>public.heic</string>
+				<string>public.heif</string>
 			</array>
 		</dict>
 		<dict>
