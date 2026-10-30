@@ -69,6 +69,7 @@ enum ExifInfo {
         if let iso = (exif[kCGImagePropertyExifISOSpeedRatings] as? [Int])?.first { exposure.append("ISO \(iso)") }
         if !exposure.isEmpty { lines.append(("Exposure", exposure.joined(separator: "  "))) }
         if let b = exif[kCGImagePropertyExifExposureBiasValue] as? Double { lines.append(("Comp.", String(format: "%+.1f EV", b))) }
+        if let a = sonyStdAdjustTag(url) { lines.append(("Std. adj.", a == 0 ? "Off" : String(format: "%+.1f EV", a))) }   // Sony only
         if let f = exif[kCGImagePropertyExifFocalLength] as? Double { lines.append(("Focal", String(format: "%.0f mm", f))) }
         if let l = exif[kCGImagePropertyExifLensModel] as? String { lines.append(("Lens", l)) }
         if let m = tiff[kCGImagePropertyTIFFModel] as? String { lines.append(("Camera", m)) }
@@ -89,15 +90,18 @@ extension ExifInfo {
     /// darker or brighter) from MakerNote tag 0x202D, in EV: a signed rational in sixths of a stop ("-6/6" = -1 EV,
     /// "0/6" = off). Found in the ARW and the camera's JPG alike. 0 for other makes or when it can't be read.
     /// The tag sits in the first few KB; ImageIO doesn't expose Sony's MakerNote, so it is read from the TIFF here.
-    static func sonyStdAdjust(_ url: URL) -> Float {
-        guard var d = Storage.head(url, bytes: 128 << 10), d.count > 16 else { return 0 }
+    static func sonyStdAdjust(_ url: URL) -> Float { sonyStdAdjustTag(url) ?? 0 }
+
+    /// The same, nil when the file is not a Sony one or has no such tag (the EXIF box then shows no line).
+    static func sonyStdAdjustTag(_ url: URL) -> Float? {
+        guard var d = Storage.head(url, bytes: 128 << 10), d.count > 16 else { return nil }
         if d.starts(with: [0xFF, 0xD8]) {                                    // JPEG: the TIFF starts after "Exif\0\0"
-            guard let r = d.range(of: Data("Exif\0\0".utf8)) else { return 0 }
+            guard let r = d.range(of: Data("Exif\0\0".utf8)) else { return nil }
             d = d.subdata(in: r.upperBound..<d.count)
         }
         let b = [UInt8](d)
         let little: Bool
-        switch (b[0], b[1]) { case (0x49, 0x49): little = true; case (0x4D, 0x4D): little = false; default: return 0 }
+        switch (b[0], b[1]) { case (0x49, 0x49): little = true; case (0x4D, 0x4D): little = false; default: return nil }
         func u16(_ o: Int) -> Int? {
             guard o >= 0, o + 2 <= b.count else { return nil }
             return little ? Int(b[o]) | Int(b[o + 1]) << 8 : Int(b[o]) << 8 | Int(b[o + 1])
@@ -117,16 +121,16 @@ extension ExifInfo {
             }
             return out
         }
-        guard let first = u32(4) else { return 0 }
+        guard let first = u32(4) else { return nil }
         let ifd0 = ifd(first)
         // only Sony's MakerNote has this layout
         guard let make = ifd0[0x010F], let mo = make.count > 4 ? u32(make.at) : make.at, mo + 4 <= b.count,
               String(decoding: b[mo..<mo + 4], as: UTF8.self).uppercased() == "SONY",
               let exifAt = ifd0[0x8769], let exif = u32(exifAt.at),
-              let note = ifd(exif)[0x927C], let notePos = u32(note.at) else { return 0 }
+              let note = ifd(exif)[0x927C], let notePos = u32(note.at) else { return nil }
         let start = notePos + 12 <= b.count && String(decoding: b[notePos..<notePos + 4], as: UTF8.self) == "SONY" ? notePos + 12 : notePos
         guard let t = ifd(start)[0x202D], t.type == 10, t.count == 1, let p = u32(t.at),
-              let num = u32(p), let den = u32(p + 4), den != 0 else { return 0 }
+              let num = u32(p), let den = u32(p + 4), den != 0 else { return nil }
         return Float(Int32(truncatingIfNeeded: num)) / Float(Int32(truncatingIfNeeded: den))
     }
 }
