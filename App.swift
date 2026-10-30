@@ -454,6 +454,14 @@ final class Model: ObservableObject {
     var customWBMemory: [URL: (Float, Float?)] = [:] // W cycle returns to the photo's last custom WB
     var panelsBeforeHideAll: Set<String>?           // Tab: hide all panels / restore
     var lookBeforeCompare: Int?                     // \ : before / after against Base
+    /// Photos shot with Sony's Exposure Std. Adjust start with the opposite exposure (saved when opened). Off by default.
+    @Published var undoStdAdjust = UserDefaults.standard.bool(forKey: PhotoMetadata.undoStdAdjustKey) {
+        didSet {
+            guard undoStdAdjust != oldValue else { return }
+            UserDefaults.standard.set(undoStdAdjust, forKey: PhotoMetadata.undoStdAdjustKey)
+            reloadFolder()                                     // the starting exposures are worked out as a folder is read
+        }
+    }
     @Published var smallEVStep = UserDefaults.standard.object(forKey: "smallEVStep") as? Double ?? 1.0 / 3 {
         didSet { UserDefaults.standard.set(smallEVStep, forKey: "smallEVStep") }
     }
@@ -781,7 +789,7 @@ final class Model: ObservableObject {
         // the grid shows no big picture: let the decoded photos go (a step back to the single view decodes the one
         // on screen again, ~0.1 s); fast browsing keeps them
         if viewMode == .grid, !fastBrowsing { bakeCache.removeAll() }
-        if viewMode == .single { scheduleRefresh(); applyChosenLookOnLanding() }
+        if viewMode == .single { scheduleRefresh(); photoOpened() }
     }
 
     private var refreshTask: Task<Void, Never>?
@@ -820,11 +828,17 @@ final class Model: ObservableObject {
         if let sc = Sidecar.load(for: url) {                // after an XMP edit cleared the cache
             if let d = sc.develop { s = d; savedDevelop.insert(url) }
             else { s.ev = sc.exposure ?? 0 }
+            if sc.develop == nil, (sc.exposure ?? 0) == 0, let a = stdAdjustEV[url] { s.ev = -a }
             if let o = sc.orientation { s.rot = Orientation.rot(sidecarCode: o, camera: Orientation.camera(url)) }
         }
         frvCache[url] = s
         return s
     }
+
+    /// Settings ▸ Exposure ▸ Undo Exposure Std. Adjust: what the camera recorded (MakerNote 0x202D), for photos where
+    /// it isn't 0, and the ones whose opposite exposure is shown but not saved yet.
+    private var stdAdjustEV: [URL: Float] = [:]
+    private var stdFixPending: Set<URL> = []
 
     /// Photos whose sidecar had this app's develop settings when read: their first undo puts those back.
     private var savedDevelop: Set<URL> = []
@@ -1228,6 +1242,24 @@ final class Model: ObservableObject {
         notify(.lookSaved, "\(name) → \(c.lastPathComponent)", icon: "checkmark.circle.fill")
     }
 
+    /// The photo on screen is known (its metadata read): the things that happen on opening a photo.
+    func photoOpened() {
+        saveStdAdjustFix()
+        applyChosenLookOnLanding()
+    }
+
+    /// Settings ▸ Exposure: a photo shot with Sony's Exposure Std. Adjust starts with the opposite exposure (seeded
+    /// in `applyMetadata`); opening it in single view saves that to its .xmp, like any edit but with no undo step
+    /// (nothing on screen changes).
+    private func saveStdAdjustFix() {
+        guard viewMode == .single, let c = current, stdFixPending.remove(c) != nil, states[c] == nil,
+              let i = libIndex[c], library[i].metadataRead, let s = frvCache[c] else { return }
+        states[c] = s; dirtyURLs.insert(c); undoneToNothing.remove(c)
+        scheduleSave()
+        let adj = stdAdjustEV[c] ?? 0
+        notify(.autoExposure, String(format: "Exposure Std. Adjust %+.1f EV on the camera: %+.1f EV saved", adj, -adj), icon: "plusminus.circle")
+    }
+
     /// Apply mode, single view: landing on a photo writes the chosen look to its .xmp unless it already has one;
     /// one that has a different saved look keeps it, with a notice in the LUT box. Called only once the photo's
     /// metadata is read, so a saved look is never overwritten before it is known.
@@ -1498,6 +1530,7 @@ final class Model: ObservableObject {
         states = [:]
         undoneToNothing = []
         frvCache = [:]
+        stdAdjustEV = [:]; stdFixPending = []
         savedDevelop = []
         recomputeWork?.cancel(); recomputeWork = nil
         lastAppliedSeq = [:]
@@ -1580,6 +1613,10 @@ final class Model: ObservableObject {
             p.metadataRead = true
             library[i] = p
             var start = PhotoState(); start.ev = m.exposure ?? 0; start.rot = m.rot
+            stdAdjustEV[u] = m.stdAdjust == 0 ? nil : m.stdAdjust
+            // Exposure Std. Adjust undone, unless the photo already has an exposure from this app, FRV or Lightroom
+            if m.stdAdjust != 0, m.develop == nil, (m.exposure ?? 0) == 0 { start.ev = -m.stdAdjust; stdFixPending.insert(u) }
+            else { stdFixPending.remove(u) }
             frvCache[u] = m.develop ?? start
             if m.develop != nil { savedDevelop.insert(u) } else { savedDevelop.remove(u) }
             if let d = m.develop, states[u] == nil, !dirtyURLs.contains(u), !undoneToNothing.contains(u) { states[u] = d }
@@ -1588,7 +1625,7 @@ final class Model: ObservableObject {
         // the current photo's saved look just arrived (from whichever read got there first): render it now
         if let c = current, landedURLs.contains(c) {
             syncLookFromState()
-            applyChosenLookOnLanding()
+            photoOpened()
             if viewMode == .single { refreshAll() }
         }
         // background batches land many times a second while a big folder is read: one recompute per 0.1 s
@@ -2418,7 +2455,7 @@ final class Model: ObservableObject {
         if let e = exifCache[url] { exifLines = e.lines; imageSize = e.size } else { exifLines = []; imageSize = "" }
         let waiting = readMetadataSoon(url)                // rating, label and saved look before the real render
         syncLookFromState()
-        if !waiting { applyChosenLookOnLanding() }
+        if !waiting { photoOpened() }
         loadXMPPanel()
         if viewMode == .single {
             showPlaceholder(url)

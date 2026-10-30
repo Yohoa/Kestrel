@@ -8,6 +8,7 @@ Newest first. Dates are when the change was made.
 
 ## Unreleased (since 1.5.3)
 
+- **Undo Sony's Exposure Std. Adjust** (Settings ▸ Exposure, off by default): a photo shot with it set (MakerNote tag 0x202D, e.g. −1 EV) starts with the opposite exposure (+1 EV), and opening it saves that to its .xmp. Photos that already have an exposure from Kestrel, FastRawViewer or Lightroom are left alone. Switching it on or off re-reads the folder.
 - **Rotate** photos a quarter turn: ⌘[ / ⌘] (as in Lightroom), the Photo menu, or right-click. In the grid it turns the selected photos, one undo step. The turn is saved in the sidecar as `tiff:Orientation`, so FastRawViewer, Lightroom and Bridge show it the same way, and a turn they saved shows here. Thumbnails, the picture, zoom, histogram, white balance picker, export and ⌘C all follow it; ⌘V and Reset leave it alone.
 - **Apply mode** now saves the chosen look to each photo you open in single view, if it has no saved look yet. A photo with a different saved look keeps it, and the LUT box says so ("Kept saved look · …"; can be switched off in Settings ▸ Notices).
 - Shorter Preview / Apply / Per photo tips.

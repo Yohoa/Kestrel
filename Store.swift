@@ -53,9 +53,13 @@ struct PhotoMetadata {
     var gear = ""
     var exposure: Float?            // libraw:Exposure (FastRawViewer) or crs:Exposure2012, the starting EV
     var rot = 0                     // the turn the sidecar's tiff:Orientation asks for
+    var stdAdjust: Float = 0        // Sony Exposure Std. Adjust (EV), read only with the setting on
+
+    static let undoStdAdjustKey = "undoExposureStdAdjust"
 
     static func read(_ url: URL) -> PhotoMetadata {
         var m = PhotoMetadata()
+        if UserDefaults.standard.bool(forKey: undoStdAdjustKey) { m.stdAdjust = ExifInfo.sonyStdAdjust(url) }
         if !ScanIndex.shared.knownWithoutSidecar(url), let sc = Sidecar.load(for: url) {
             m.rating = sc.rating; m.label = sc.label; m.develop = sc.develop; m.exposure = sc.exposure
             if let o = sc.orientation { m.rot = Orientation.rot(sidecarCode: o, camera: Orientation.camera(url)) }   // header read only then

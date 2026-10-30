@@ -81,3 +81,52 @@ enum ExifInfo {
         return (lines, size)
     }
 }
+
+// MARK: - Sony "Exposure Std. Adjust"
+
+extension ExifInfo {
+    /// Sony's Exposure Std. Adjust (a camera menu setting that shifts the meter's standard and so exposes every shot
+    /// darker or brighter) from MakerNote tag 0x202D, in EV: a signed rational in sixths of a stop ("-6/6" = -1 EV,
+    /// "0/6" = off). Found in the ARW and the camera's JPG alike. 0 for other makes or when it can't be read.
+    /// The tag sits in the first few KB; ImageIO doesn't expose Sony's MakerNote, so it is read from the TIFF here.
+    static func sonyStdAdjust(_ url: URL) -> Float {
+        guard var d = Storage.head(url, bytes: 128 << 10), d.count > 16 else { return 0 }
+        if d.starts(with: [0xFF, 0xD8]) {                                    // JPEG: the TIFF starts after "Exif\0\0"
+            guard let r = d.range(of: Data("Exif\0\0".utf8)) else { return 0 }
+            d = d.subdata(in: r.upperBound..<d.count)
+        }
+        let b = [UInt8](d)
+        let little: Bool
+        switch (b[0], b[1]) { case (0x49, 0x49): little = true; case (0x4D, 0x4D): little = false; default: return 0 }
+        func u16(_ o: Int) -> Int? {
+            guard o >= 0, o + 2 <= b.count else { return nil }
+            return little ? Int(b[o]) | Int(b[o + 1]) << 8 : Int(b[o]) << 8 | Int(b[o + 1])
+        }
+        func u32(_ o: Int) -> Int? {
+            guard let lo = u16(little ? o : o + 2), let hi = u16(little ? o + 2 : o) else { return nil }
+            return hi << 16 | lo
+        }
+        /// Tag → (type, count, offset of the value field).
+        func ifd(_ o: Int) -> [Int: (type: Int, count: Int, at: Int)] {
+            guard let n = u16(o), n < 1000 else { return [:] }
+            var out: [Int: (type: Int, count: Int, at: Int)] = [:]
+            for i in 0..<n {
+                let e = o + 2 + 12 * i
+                guard let tag = u16(e), let type = u16(e + 2), let count = u32(e + 4) else { break }
+                out[tag] = (type, count, e + 8)
+            }
+            return out
+        }
+        guard let first = u32(4) else { return 0 }
+        let ifd0 = ifd(first)
+        // only Sony's MakerNote has this layout
+        guard let make = ifd0[0x010F], let mo = make.count > 4 ? u32(make.at) : make.at, mo + 4 <= b.count,
+              String(decoding: b[mo..<mo + 4], as: UTF8.self).uppercased() == "SONY",
+              let exifAt = ifd0[0x8769], let exif = u32(exifAt.at),
+              let note = ifd(exif)[0x927C], let notePos = u32(note.at) else { return 0 }
+        let start = notePos + 12 <= b.count && String(decoding: b[notePos..<notePos + 4], as: UTF8.self) == "SONY" ? notePos + 12 : notePos
+        guard let t = ifd(start)[0x202D], t.type == 10, t.count == 1, let p = u32(t.at),
+              let num = u32(p), let den = u32(p + 4), den != 0 else { return 0 }
+        return Float(Int32(truncatingIfNeeded: num)) / Float(Int32(truncatingIfNeeded: den))
+    }
+}

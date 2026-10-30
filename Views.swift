@@ -195,6 +195,11 @@ struct SettingsView: View {
                 Text("Smart zoom = the smallest of 25 / 33 / 50 / 67 / 100 % that is at least this many times the fit-to-window size, never above 100 %. ⌘1 is always exactly 100 %.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Exposure") {
+                Toggle("Undo Sony's Exposure Std. Adjust", isOn: $m.undoStdAdjust)
+                Text("A photo shot with Exposure Std. Adjust set (e.g. −1 EV) starts with the opposite exposure (+1 EV), saved to its .xmp when you open it. Photos that already have an exposure are left alone.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Exposure keys (⌥+ / ⌥−, ⌥⌘ for the big step)") {
                 Picker("Small step", selection: $m.smallEVStep) {
                     Text("0.1 EV").tag(0.1); Text("⅓ EV").tag(1.0 / 3); Text("0.5 EV").tag(0.5)
