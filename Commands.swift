@@ -254,6 +254,9 @@ struct PanelCommands: Commands {
                 Button(a.menuTitle + (m.shortcuts.shortcut(a).map { "    " + $0.display } ?? "")) { m.perform(a) }
             }
             Button("Paste Settings    ⌘V") { m.pasteSettings() }
+            Divider()
+            Button("Rotate Left    ⌘[") { m.rotate(-1) }.disabled(m.current == nil)
+            Button("Rotate Right    ⌘]") { m.rotate(1) }.disabled(m.current == nil)
             Button("Reset Image Rendering to Defaults") { m.resetAdjustments(); m.developChanged() }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
         }

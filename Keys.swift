@@ -140,6 +140,8 @@ extension Model {
             case "d": toggleCurrentSelection(thenStep: 1); return true
             case "c": copyImageToClipboard(); return true                        // the edited photo itself
             case "v": pasteSettings(); return true
+            case "[": rotate(-1); return true                                  // Lightroom's keys
+            case "]": rotate(1); return true
             default: return false                                       // ⌘O, ⌘F, ⌘1 … belong to the menus
             }
         }

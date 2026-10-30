@@ -269,6 +269,8 @@ struct ContentView: View {
             ForEach(labelNames, id: \.self) { n in Button(n) { m.setLabel(n, on: ts) } }
             Button("No label") { m.setLabel(nil, on: ts) }
         }
+        Button("Rotate Left") { m.rotate(-1, on: ts) }
+        Button("Rotate Right") { m.rotate(1, on: ts) }
         Divider()
         Button(m.selection.contains(url) ? "Remove from selection" : "Add to selection") { m.click(url, command: true, shift: false) }
         Button("Select all shown") { m.selectAll() }

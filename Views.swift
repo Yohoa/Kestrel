@@ -30,7 +30,7 @@ struct FilmstripView: View {
                 LazyHStack(spacing: 6) {
                     ForEach(m.shownPhotos) { p in
                         FilmCell(photo: p, isCurrent: p.url == m.current, isSelected: m.selection.contains(p.url),
-                                 image: thumbs.images[p.url], hovered: thumbs.hovered == p.url, store: thumbs,
+                                 image: thumbs.image(p.url, rot: m.state(for: p.url).rot), hovered: thumbs.hovered == p.url, store: thumbs,
                                  markBox: m.advancedSelection, showKind: m.showKind, imageHeight: imageHeight, onMark: { m.toggleMark(p.url) })
                             .equatable()
                             .id(p.url)

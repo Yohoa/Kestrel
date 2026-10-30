@@ -52,10 +52,15 @@ struct PhotoMetadata {
     var date = Date.distantPast
     var gear = ""
     var exposure: Float?            // libraw:Exposure (FastRawViewer) or crs:Exposure2012, the starting EV
+    var rot = 0                     // the turn the sidecar's tiff:Orientation asks for
 
     static func read(_ url: URL) -> PhotoMetadata {
         var m = PhotoMetadata()
-        if !ScanIndex.shared.knownWithoutSidecar(url), let sc = Sidecar.load(for: url) { m.rating = sc.rating; m.label = sc.label; m.develop = sc.develop; m.exposure = sc.exposure }
+        if !ScanIndex.shared.knownWithoutSidecar(url), let sc = Sidecar.load(for: url) {
+            m.rating = sc.rating; m.label = sc.label; m.develop = sc.develop; m.exposure = sc.exposure
+            if let o = sc.orientation { m.rot = Orientation.rot(sidecarCode: o, camera: Orientation.camera(url)) }   // header read only then
+            m.develop?.rot = m.rot
+        }
         let exif = ExifInfo.capture(url)
         m.gear = exif.gear
         m.date = exif.date ?? (try? url.resourceValues(forKeys: [.creationDateKey]).creationDate) ?? .distantPast
@@ -139,8 +144,9 @@ struct PhotoState: Codable, Equatable {
     var hl = true                   // highlight recovery
     var look: String?               // "pp:7" or "lut:<path in the LUT folder>"; nil = keep the current look
     var contrast: Float = 0         // FastRawViewer contrast grade, -5...+5, in 0.1 steps (K / ⇧K move 0.5)
+    var rot = 0                     // quarter turns clockwise from the camera's orientation; saved as tiff:Orientation
 
-    var adjust: Adjust { Adjust(ev: ev, temp: temp, tint: tint, highlightRecovery: hl, contrast: contrast) }
+    var adjust: Adjust { Adjust(ev: ev, temp: temp, tint: tint, highlightRecovery: hl, contrast: contrast, rot: rot) }
 }
 
 // MARK: - Filtering and sorting (replaces FastRawViewer's Sort & Filter panel)

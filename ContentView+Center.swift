@@ -106,6 +106,9 @@ extension ContentView {
         Button { m.autoExposure(scope: m.current.map { [$0] } ?? []) } label: { Label("Auto Exposure", systemImage: "plusminus.circle") }
         Button { m.applyAutoWB() } label: { Label("Auto White Balance", systemImage: "thermometer.sun") }
         Divider()
+        Button { m.rotate(-1, on: ts) } label: { Label("Rotate Left", systemImage: "rotate.left") }.help("⌘[")
+        Button { m.rotate(1, on: ts) } label: { Label("Rotate Right", systemImage: "rotate.right") }.help("⌘]")
+        Divider()
         Button { m.quickExport() } label: { Label("Quick Export", systemImage: "square.and.arrow.up") }.disabled(m.exporting)
             .help("No dialog: into the folder the Export settings name (a HEIC folder next to the RAW by default)")
         Button("Export As…") { m.exportCurrent() }.disabled(m.exporting).help("Asks where to save this photo as a 10-bit HEIC (⌘E)")
@@ -281,7 +284,7 @@ extension ContentView {
                     LazyVGrid(columns: Array(repeating: GridItem(.fixed(m.gridCell + 6), spacing: 8), count: max(1, m.gridColumns)), spacing: 8) {
                         ForEach(m.shownPhotos) { p in
                             GridCell(photo: p, isCurrent: p.url == m.current, isSelected: m.selection.contains(p.url),
-                                     size: m.gridCell, image: thumbs.images[p.url], hovered: thumbs.hovered == p.url, store: thumbs,
+                                     size: m.gridCell, image: thumbs.image(p.url, rot: m.state(for: p.url).rot), hovered: thumbs.hovered == p.url, store: thumbs,
                                      markBox: m.advancedSelection, showKind: m.showKind, onMark: { m.toggleMark(p.url) })
                                 .equatable()
                                 .id(p.url)

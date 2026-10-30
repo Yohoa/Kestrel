@@ -19,6 +19,7 @@ enum XMPEdit {
         "crs": "http://ns.adobe.com/camera-raw-settings/1.0/",
         "libraw": "http://ns.libraw.com/librawxmp/1.0/",
         "photoshop": "http://ns.adobe.com/photoshop/1.0/",
+        "tiff": "http://ns.adobe.com/tiff/1.0/",
         "arwexport": "http://ns.arwexport.app/1.0/",
     ]
 
@@ -227,6 +228,7 @@ enum XMPEdit {
         check("crs:Tint", "^[+-]?\\d+$", "an integer")
         check("libraw:Exposure", "^[+-]?\\d+(\\.\\d+)?$", "a decimal")
         check("arwexport:Exposure", "^[+-]?\\d+(\\.\\d+)?$", "a signed decimal")
+        check("tiff:Orientation", "^[1-8]$", "an orientation code from 1 to 8")
 
         // Our properties must be direct children of the outer description, not inside e.g. crs:Look.
         let tags = descriptionTags(in: text)
@@ -442,19 +444,46 @@ enum XMPFile {
     }
 
     /// Saves the app's develop settings (arwexport: namespace only) into the sidecar.
-    static func writeDevelop(_ state: PhotoState, for raw: URL) throws {
-        try write(DevelopXMP.changes(for: state), for: raw)
+    /// The sidecar copied next to an export. The exported picture is already turned, so a tiff:Orientation in the
+    /// copy would turn it a second time in an app that reads it: that tag is left out.
+    static func copyForExport(_ sc: Sidecar, to x: URL) {
+        guard sc.orientation != nil,
+              let t = XMPEdit.apply([XMPChange(tag: "tiff:Orientation", value: nil)], to: sc.text, touchDate: nil) else {
+            try? FileManager.default.copyItem(at: sc.url, to: x); return
+        }
+        try? Data(t.utf8).write(to: x, options: .atomic)
+    }
+
+    /// nil: undone back to "never edited", our tags removed. `rot` is the turn to keep either way (an undo to
+    /// "never edited" puts back the one the sidecar had).
+    static func saveDevelop(_ state: PhotoState?, rot: Int, for raw: URL) throws {
+        try write(state.map(DevelopXMP.changes) ?? DevelopXMP.removalChanges, for: raw, rot: rot)
+    }
+
+    /// The tiff:Orientation change for turn `rot`, if the sidecar doesn't already say that. FastRawViewer, Lightroom
+    /// and Bridge read this tag, so they turn the photo the same way. Left alone when it already agrees (absent
+    /// counts as no turn), so editing an unturned photo never adds it; an unturned photo that had one gets the
+    /// camera's own code back rather than losing the tag.
+    private static func orientationChange(rot: Int, in text: String, raw: URL) -> XMPChange? {
+        let existing = XMPEdit.value(of: "tiff:Orientation", in: text).flatMap { Int($0) }
+        if existing == nil && rot == 0 { return nil }
+        if let e = existing, Orientation.quarter(e) == nil { if rot == 0 { return nil } }   // mirrored: only replaced by a real turn
+        let cam = Orientation.camera(raw)
+        if let e = existing, Orientation.quarter(e) != nil, Orientation.rot(sidecarCode: e, camera: cam) == rot { return nil }
+        return XMPChange(tag: "tiff:Orientation", value: String(Orientation.code(cam + rot)))
     }
 
     /// Applies `changes` to the sidecar (creating a minimal one if missing). Keeps a one-time backup.
-    /// Call it through `SidecarWriter` so writes to one file never overlap.
-    static func write(_ changes: [XMPChange], for raw: URL) throws {
+    /// Call it through `SidecarWriter` so writes to one file never overlap. With `rot`, tiff:Orientation follows it.
+    static func write(_ changes: [XMPChange], for raw: URL, rot: Int? = nil) throws {
         // the photo was moved (to _Rejected) by a move queued before this write: its sidecar went with it, so
         // writing here would leave a stray one behind (and ⌘Z would then keep the real one in _Rejected)
         guard FileManager.default.fileExists(atPath: raw.path) else { return }
         ScanIndex.shared.sidecarSeen(url(for: raw))       // it exists from now on (or is about to)
         let existing = read(raw)
         let base = existing?.text ?? XMPEdit.minimalDocument(ext: raw.pathExtension)
+        var changes = changes
+        if let rot, let o = orientationChange(rot: rot, in: base, raw: raw) { changes.append(o) }
         guard let edited = XMPEdit.apply(changes, to: base) else {
             throw WriteError(message: "Refused: \(url(for: raw).lastPathComponent) is not well-formed XML or the edit would break it")
         }
@@ -488,6 +517,7 @@ struct Sidecar {
     var tint: Float?            // crs:Tint
     var text: String
     var develop: PhotoState?    // settings this app saved (arwexport: namespace), if any
+    var orientation: Int?       // tiff:Orientation (FastRawViewer, Lightroom, or this app's rotation)
 
     static func url(for raw: URL) -> URL { XMPFile.url(for: raw) }
 
@@ -505,6 +535,7 @@ struct Sidecar {
         return Sidecar(url: url,
                        rating: XMPEdit.value(of: "xmp:Rating", in: s).flatMap { Int($0) }.map { max(-1, min(5, $0)) } ?? 0,   // other tools' odd values
                        label: label, exposure: exposure, temperature: num("crs:Temperature"), tint: num("crs:Tint"),
-                       text: s, develop: DevelopXMP.state(from: s))
+                       text: s, develop: DevelopXMP.state(from: s),
+                       orientation: XMPEdit.value(of: "tiff:Orientation", in: s).flatMap { Int($0) })
     }
 }

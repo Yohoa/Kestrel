@@ -100,7 +100,7 @@ final class RAWSource {
 
     /// Decodes with `adj` at `scale` and bakes the result to a flat bitmap while the parameters still hold.
     func bake(_ adj: Adjust, scale: Float, scene: Bool) -> CIImage? {
-        if BitmapPhoto.isBitmap(url) { return BitmapPhoto.decode(url, adj: adj, scale: scale).flatMap(BakedPhoto.bake) }
+        if BitmapPhoto.isBitmap(url) { return BitmapPhoto.decode(url, adj: adj, scale: scale).map { Orientation.rotate($0, adj.rot) }.flatMap(BakedPhoto.bake) }
         lock.lock(); defer { lock.unlock() }
         guard prepare(), let f = filter, let b = base else { return nil }
         f.scaleFactor = scale
@@ -112,7 +112,7 @@ final class RAWSource {
         f.neutralTint = adj.tint ?? b.tint
         if #available(macOS 26, *), f.isHighlightRecoverySupported { f.isHighlightRecoveryEnabled = adj.highlightRecovery }
         guard let out = f.outputImage else { return nil }
-        return BakedPhoto.bake(out)
+        return BakedPhoto.bake(Orientation.rotate(out, adj.rot))
     }
 }
 

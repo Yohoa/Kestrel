@@ -9,7 +9,7 @@ enum NoticePlace { case picture, lut }
 enum NoticeKind: String, CaseIterable, Identifiable {
     // below the photo
     case export, copyPhoto, batchExport, rating, label, moveRejected, undoRedo
-    case autoExposure, whiteBalance, copyPaste, lookStep, filter, overlay, foldersRefreshed, folderRenamed, panelHidden
+    case autoExposure, whiteBalance, copyPaste, lookStep, filter, overlay, foldersRefreshed, folderRenamed, panelHidden, rotate
     // in the LUT box
     case lookSaved, lookKept, lutsLoaded, favourite, lutInput, lookMode
 
@@ -41,6 +41,7 @@ enum NoticeKind: String, CaseIterable, Identifiable {
         case .foldersRefreshed: "Folders refreshed"
         case .folderRenamed: "Folder renamed"
         case .panelHidden: "A panel closed (and how to get it back)"
+        case .rotate: "Photo rotated (⌘[ ⌘])"
         case .lookSaved: "Look saved to a photo (double-click)"
         case .lookKept: "Apply mode kept a photo's saved look"
         case .lutsLoaded: "LUTs loaded, new LUTs found"

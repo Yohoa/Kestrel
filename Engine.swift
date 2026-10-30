@@ -117,6 +117,9 @@ struct Adjust: Hashable {
     /// FastRawViewer-style contrast grade, -5...+5 (K / ⇧K). Applied in scene-linear light around 18 % grey,
     /// before the look, so it works the same for the PP looks, log looks and LUTs.
     var contrast: Float = 0
+    /// Quarter turns clockwise on top of the camera's own orientation (0...3). Applied right after decoding, so
+    /// everything downstream (looks, histogram, overlay, zoom, export) sees the photo the right way up.
+    var rot = 0
 }
 
 final class Decoded {
@@ -137,8 +140,9 @@ final class Decoded {
     }
 
     private func decode(scene: Bool) -> CIImage? {
-        if BitmapPhoto.isBitmap(url) { return BitmapPhoto.decode(url, adj: adj, scale: scale) }
-        return Decoded.filter(url: url, adj: adj, scale: scale, scene: scene)?.filter.outputImage
+        let img = BitmapPhoto.isBitmap(url) ? BitmapPhoto.decode(url, adj: adj, scale: scale)
+            : Decoded.filter(url: url, adj: adj, scale: scale, scene: scene)?.filter.outputImage
+        return img.map { Orientation.rotate($0, adj.rot) }
     }
 
     /// The configured RAW filter plus the camera's as-shot white balance (read before any custom WB is applied).
@@ -161,7 +165,8 @@ final class Decoded {
 
     /// Click-to-grey: the temperature and tint that make the clicked spot neutral. `u` and `v` are 0...1 fractions
     /// of the picture (v from the top). Core Image wants full-size output coordinates with the origin bottom-left.
-    static func pickNeutral(_ url: URL, u: Double, vFromTop v: Double) -> (temp: Float, tint: Float)? {
+    static func pickNeutral(_ url: URL, u: Double, vFromTop v: Double, rot: Int = 0) -> (temp: Float, tint: Float)? {
+        let (u, v) = Orientation.unrotate(u: u, v: v, rot)        // the click is on the turned picture
         if BitmapPhoto.isBitmap(url) { return BitmapPhoto.colour(url, u: u, vFromTop: v).flatMap(BitmapPhoto.neutral) }
         guard let f = CIRAWFilter(imageURL: url), let ext = f.outputImage?.extent else { return nil }
         f.neutralLocation = CGPoint(x: u * Double(ext.width), y: (1 - v) * Double(ext.height))
@@ -532,5 +537,73 @@ enum BitmapPhoto {
         var px = [Float](repeating: 0, count: 4)
         Engine.ctx.render(avg, toBitmap: &px, rowBytes: 16, bounds: CGRect(x: 0, y: 0, width: 1, height: 1), format: .RGBAf, colorSpace: Engine.linear)
         return SIMD3(px[0], px[1], px[2])
+    }
+}
+
+// MARK: - Rotation
+
+/// Quarter turns clockwise, and the EXIF / TIFF orientation codes they stand for (mirrored codes are left alone:
+/// no camera writes them). The camera's own orientation is applied by the decoder; `rot` is on top of it.
+enum Orientation {
+    static let codes = [1, 6, 3, 8]
+
+    static func quarter(_ code: Int) -> Int? { codes.firstIndex(of: code) }
+    static func code(_ quarter: Int) -> Int { codes[((quarter % 4) + 4) % 4] }
+    static func turn(_ rot: Int, by d: Int) -> Int { (((rot + d) % 4) + 4) % 4 }
+
+    /// The file's own orientation in quarter turns (0 when it has none, or a mirrored one). Reads the header.
+    static func camera(_ url: URL) -> Int {
+        guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),
+              let p = CGImageSourceCopyPropertiesAtIndex(src, 0, nil) as? [CFString: Any],
+              let c = p[kCGImagePropertyOrientation] as? Int else { return 0 }
+        return quarter(c) ?? 0
+    }
+
+    /// The turn a sidecar's tiff:Orientation asks for, on top of the camera's (0 for none, or a mirrored code).
+    static func rot(sidecarCode: Int?, camera: Int) -> Int {
+        guard let c = sidecarCode, let q = quarter(c) else { return 0 }
+        return turn(q, by: -camera)
+    }
+
+    static func rotate(_ img: CIImage, _ rot: Int) -> CIImage {
+        let o: CGImagePropertyOrientation
+        switch turn(rot, by: 0) {
+        case 1: o = .right          // 90° clockwise
+        case 2: o = .down
+        case 3: o = .left
+        default: return img
+        }
+        let r = img.oriented(o)
+        return r.transformed(by: CGAffineTransform(translationX: -r.extent.minX, y: -r.extent.minY))
+    }
+
+    static func rotate(_ cg: CGImage, _ rot: Int) -> CGImage? {
+        let q = turn(rot, by: 0)
+        guard q != 0 else { return cg }
+        let w = q == 2 ? cg.width : cg.height, h = q == 2 ? cg.height : cg.width
+        guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
+                                  space: cg.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!,
+                                  bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
+        // CG's origin is bottom-left: a clockwise turn of the picture is a negative angle here
+        ctx.translateBy(x: CGFloat(w) / 2, y: CGFloat(h) / 2)
+        ctx.rotate(by: -CGFloat(q) * .pi / 2)
+        ctx.draw(cg, in: CGRect(x: -CGFloat(cg.width) / 2, y: -CGFloat(cg.height) / 2, width: CGFloat(cg.width), height: CGFloat(cg.height)))
+        return ctx.makeImage()
+    }
+
+    static func rotate(_ img: NSImage, _ rot: Int) -> NSImage {
+        guard turn(rot, by: 0) != 0, let cg = img.cgImage(forProposedRect: nil, context: nil, hints: nil),
+              let r = rotate(cg, rot) else { return img }
+        return NSImage(cgImage: r, size: .zero)
+    }
+
+    /// A point on the turned picture (0...1, v from the top) back on the camera's picture.
+    static func unrotate(u: Double, v: Double, _ rot: Int) -> (Double, Double) {
+        switch turn(rot, by: 0) {
+        case 1: return (v, 1 - u)
+        case 2: return (1 - u, 1 - v)
+        case 3: return (1 - v, u)
+        default: return (u, v)
+        }
     }
 }

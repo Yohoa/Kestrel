@@ -820,6 +820,7 @@ final class Model: ObservableObject {
         if let sc = Sidecar.load(for: url) {                // after an XMP edit cleared the cache
             if let d = sc.develop { s = d; savedDevelop.insert(url) }
             else { s.ev = sc.exposure ?? 0 }
+            if let o = sc.orientation { s.rot = Orientation.rot(sidecarCode: o, camera: Orientation.camera(url)) }
         }
         frvCache[url] = s
         return s
@@ -857,6 +858,7 @@ final class Model: ObservableObject {
             if s.contrast != b.contrast { fields.insert("contrast") }
             if s.look != b.look { fields.insert("look") }
             if s.hl != b.hl { fields.insert("other") }
+            if s.rot != b.rot { fields.insert("rot") }
         }
         guard !after.isEmpty else { return }
         scheduleSave()
@@ -864,7 +866,7 @@ final class Model: ObservableObject {
         // A slider drag is one step: continuous controls on the same photos merge; looks, paste etc. never do.
         let f = fields.sorted().joined(separator: ",")
         let key = ["ev", "wb", "contrast"].contains(f) ? "develop:\(f):" + after.keys.map(\.path).sorted().joined(separator: "|") : nil
-        let label = ["ev": "Exposure", "wb": "White Balance", "contrast": "Contrast", "look": "Look"][f] ?? "Develop"
+        let label = ["ev": "Exposure", "wb": "White Balance", "contrast": "Contrast", "look": "Look", "rot": "Rotate"][f] ?? "Develop"
         undo.record(label, key: key, group: group,
                     undo: { [weak self] in self?.restoreStates(before) }, redo: { [weak self] in self?.restoreStates(after) })
     }
@@ -883,6 +885,19 @@ final class Model: ObservableObject {
     }
 
     func editCurrent(_ change: (inout PhotoState) -> Void) { if let c = current { edit([c], change) } }
+
+    /// ⌘] / ⌘[: a quarter turn clockwise (1) or anticlockwise (-1) of the photo on screen, or the grid's group
+    /// (the same photos a rating goes to). One undo step.
+    func rotate(_ d: Int, on targets: [URL]? = nil) {
+        let ts = targets ?? metadataTargets()
+        guard !ts.isEmpty else { return }
+        if zoomed, let c = current, ts.contains(c) { unzoom() }
+        edit(ts) { $0.rot = Orientation.turn($0.rot, by: d) }
+        let what = ts.count == 1 ? ts[0].lastPathComponent : "\(ts.count) photos"
+        status = (d > 0 ? "Rotated right: " : "Rotated left: ") + what
+        notify(.rotate, status, icon: d > 0 ? "rotate.right" : "rotate.left")
+        refreshAll()
+    }
 
     // Slider drags: the value lives here while the knob moves (live preview, no undo step / save per tick),
     // and is committed as one edit on release.
@@ -930,7 +945,7 @@ final class Model: ObservableObject {
     var wbIsCustom: Bool { currentState.temp != nil || currentState.tint != nil }
 
     func resetWB() { editCurrent { $0.temp = nil; $0.tint = nil } }
-    func resetAdjustments() { editCurrent { let look = $0.look; $0 = PhotoState(); $0.look = look } }
+    func resetAdjustments() { editCurrent { let look = $0.look, rot = $0.rot; $0 = PhotoState(); $0.look = look; $0.rot = rot } }
 
     func applyWBPreset(_ p: WBPreset) {
         if p.temp == -1 { applyAutoWB(); return }
@@ -1114,10 +1129,9 @@ final class Model: ObservableObject {
         let work = developWork(urls)
         SidecarWriter.shared.submit({ () -> [String] in
             var errors: [String] = []
-            for (u, st) in work {
+            for (u, st, rot) in work {
                 do {
-                    if let st { try XMPFile.writeDevelop(st, for: u) }
-                    else { try XMPFile.write(DevelopXMP.removalChanges, for: u) }      // undone back to "never edited"
+                    try XMPFile.saveDevelop(st, rot: rot, for: u)          // st nil: undone back to "never edited"
                 }
                 catch { errors.append("\(u.lastPathComponent): \(error.localizedDescription)") }
             }
@@ -1135,11 +1149,12 @@ final class Model: ObservableObject {
         })
     }
 
-    /// What to write for each changed photo: its settings, or nil = remove ours (only after an undo to "never edited").
-    private func developWork(_ urls: Set<URL>) -> [(URL, PhotoState?)] {
+    /// What to write for each changed photo: its settings, or nil = remove ours (only after an undo to "never edited"),
+    /// and its turn (after such an undo, the one the sidecar had when read).
+    private func developWork(_ urls: Set<URL>) -> [(URL, PhotoState?, Int)] {
         urls.compactMap { u in
-            if let s = states[u] { return (u, s) }
-            return undoneToNothing.contains(u) ? (u, nil) : nil
+            if let s = states[u] { return (u, s, s.rot) }
+            return undoneToNothing.contains(u) ? (u, nil, frvCache[u]?.rot ?? 0) : nil
         }
     }
 
@@ -1150,9 +1165,7 @@ final class Model: ObservableObject {
         dirtyURLs = []
         let work = developWork(urls)
         SidecarWriter.shared.runSync {
-            for (u, st) in work {
-                if let st { try? XMPFile.writeDevelop(st, for: u) } else { try? XMPFile.write(DevelopXMP.removalChanges, for: u) }
-            }
+            for (u, st, rot) in work { try? XMPFile.saveDevelop(st, rot: rot, for: u) }
         }
         SidecarWriter.shared.drain()
     }
@@ -1566,7 +1579,7 @@ final class Model: ObservableObject {
             p.gear = m.gear
             p.metadataRead = true
             library[i] = p
-            var start = PhotoState(); start.ev = m.exposure ?? 0
+            var start = PhotoState(); start.ev = m.exposure ?? 0; start.rot = m.rot
             frvCache[u] = m.develop ?? start
             if m.develop != nil { savedDevelop.insert(u) } else { savedDevelop.remove(u) }
             if let d = m.develop, states[u] == nil, !dirtyURLs.contains(u), !undoneToNothing.contains(u) { states[u] = d }
@@ -2416,9 +2429,10 @@ final class Model: ObservableObject {
     /// Something is on screen within milliseconds: the filmstrip thumbnail if we have it, then the camera's
     /// embedded JPEG (~12 ms to read). The real render replaces it; a late placeholder never overwrites a render.
     private func showPlaceholder(_ url: URL) {
-        if preview == nil, let t = filmThumbs.images[url] { preview = t; previewIsPlaceholder = true }
+        let rot = currentState.rot
+        if preview == nil, let t = filmThumbs.image(url, rot: rot) { preview = t; previewIsPlaceholder = true }
         RenderScheduler.shared.placeholder { [weak self] in
-            let img = EmbeddedPreview.load(url)
+            let img = EmbeddedPreview.load(url).map { Orientation.rotate($0, rot) }
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard let self, let img, self.current == url, self.preview == nil || self.previewIsPlaceholder else { return }
@@ -2880,8 +2894,9 @@ final class Model: ObservableObject {
         let u = (point.x - (vw - w) / 2) / w, v = (point.y - (vh - h) / 2) / h
         guard (0...1).contains(u), (0...1).contains(v) else { return }
         pickingWB = false
+        let rot = currentState.rot
         Task.detached(priority: .userInitiated) { [weak self] in
-            let r = Decoded.pickNeutral(url, u: u, vFromTop: v)
+            let r = Decoded.pickNeutral(url, u: u, vFromTop: v, rot: rot)
             await MainActor.run {
                 guard let self, self.current == url, let r else { return }
                 self.editCurrent { $0.temp = r.temp; $0.tint = r.tint }
@@ -3081,7 +3096,7 @@ final class Model: ObservableObject {
                 if let sc {
                     let x = dest.deletingPathExtension().appendingPathExtension("xmp")
                     try? FileManager.default.removeItem(at: x)
-                    try? FileManager.default.copyItem(at: sc.url, to: x)
+                    XMPFile.copyForExport(sc, to: x)
                 }
                 msg = "Saved \(dest.lastPathComponent)"
             } catch { msg = "Failed: \(error.localizedDescription)" }
@@ -3158,7 +3173,7 @@ final class Model: ObservableObject {
                             if let sc {
                                 let x = dest.deletingPathExtension().appendingPathExtension("xmp")
                                 try? FileManager.default.removeItem(at: x)
-                                try? FileManager.default.copyItem(at: sc.url, to: x)
+                                XMPFile.copyForExport(sc, to: x)
                             }
                         } catch { fails.append("\(stem) \(look.title): \(error.localizedDescription)") }
                         n += 1

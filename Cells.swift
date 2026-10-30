@@ -38,7 +38,20 @@ final class ThumbStore: ObservableObject {
         queue.addOperation(op)
     }
 
+    /// The thumbnail turned by `rot` (a photo rotated in the app); the turned copy is kept until the thumbnail
+    /// or the turn changes. The cached thumbnail itself always stays as the camera made it.
+    func image(_ url: URL, rot: Int) -> NSImage? {
+        guard let img = images[url] else { return nil }
+        guard rot != 0 else { return img }
+        if let t = turned[url], t.rot == rot, t.source === img { return t.image }
+        let r = Orientation.rotate(img, rot)
+        turned[url] = (rot, img, r)
+        return r
+    }
+    private var turned: [URL: (rot: Int, source: NSImage, image: NSImage)] = [:]
+
     private func trim() {
+        turned = turned.filter { images[$0.key] === $0.value.source }
         guard images.count > keep else { return }
         var drop = images.count - keep
         var kept: [URL] = []
