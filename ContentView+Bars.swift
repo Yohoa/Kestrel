@@ -81,7 +81,6 @@ extension ContentView {
                     .help("⌘V, Apply to…, Copy WB to… and Export act on these; ratings and labels too in the grid (in single view they act on the photo on screen). Esc clears.")
             }
             Divider()
-            ClipProgressView(m: m, style: 1).layoutPriority(2)
             if m.exporting {
                 ProgressView(value: m.progress).frame(width: 80).help("Export progress")
                 Button("Cancel") { m.cancelExport() }.controlSize(.small).help("Stop the export (photos already written are kept)")
@@ -283,57 +282,39 @@ struct StarStrip: View {
     }
 }
 
-/// Copying several photos to the clipboard: how far it got, and a ✕ that stops it. Three looks to choose from
-/// (Model.clipProgressStyle): a capsule over the picture, a part of the status bar, a panel at the top.
+/// Copying several photos to the clipboard: a capsule over the picture, like the notices, with how far it got and
+/// a ✕ that stops it; when it is done it turns green, says what was copied, and fades out.
 struct ClipProgressView: View {
     @ObservedObject var m: Model
-    let style: Int
 
     var body: some View {
-        if let p = m.clipProgress, m.clipProgressStyle == style {
-            let f = Double(p.done) / Double(max(p.total, 1))
-            switch style {
-            case 1:                                                   // in the status bar
-                HStack(spacing: 6) {
-                    Image(systemName: "doc.on.doc").foregroundStyle(.secondary)
-                    ProgressView(value: f).frame(width: 80)
-                    Text("\(p.done)/\(p.total)").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                    cancel
+        Group {
+            if let text = m.clipFinished {
+                HStack(spacing: 8) {
+                    Image(systemName: "checkmark.circle.fill")
+                    Text(text).font(.system(size: 12, weight: .semibold).monospacedDigit())
                 }
-                .fixedSize()
-                .help("Copying \(p.total) photos to the clipboard, each with its own look")
-            case 2:                                                   // a panel at the top
-                VStack(alignment: .leading, spacing: 8) {
-                    HStack {
-                        Label("Copying \(p.total) photos to the clipboard", systemImage: "doc.on.doc").font(.system(size: 13, weight: .semibold))
-                        Spacer(minLength: 16)
-                        cancel
-                    }
-                    ProgressView(value: f)
-                    Text("\(p.done) of \(p.total) · each with its own look").font(.caption.monospacedDigit()).foregroundStyle(.secondary)
-                }
-                .padding(14)
-                .frame(width: 340)
-                .background(.thickMaterial, in: RoundedRectangle(cornerRadius: 14))
-                .overlay(RoundedRectangle(cornerRadius: 14).stroke(Color.primary.opacity(0.12)))
-                .shadow(color: .black.opacity(0.3), radius: 16, y: 6)
-                .padding(.top, 14)
-                .transition(.move(edge: .top).combined(with: .opacity))
-            default:                                                  // a capsule over the picture, like the notices
+                .foregroundStyle(.white)
+                .padding(.horizontal, 14).padding(.vertical, 8)
+                .background(Color.green.opacity(0.85), in: Capsule())
+                .overlay(Capsule().stroke(Color.white.opacity(0.25)))
+                .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
+                .transition(.opacity)
+            } else if let p = m.clipProgress {
                 HStack(spacing: 10) {
                     Image(systemName: "doc.on.doc")
                     Text("Copying \(p.done) of \(p.total)").font(.system(size: 12, weight: .medium).monospacedDigit())
-                    ProgressView(value: f).frame(width: 120)
+                    ProgressView(value: Double(p.done) / Double(max(p.total, 1))).frame(width: 120)
                     cancel
                 }
                 .padding(.horizontal, 14).padding(.vertical, 8)
                 .background(.thickMaterial, in: Capsule())
                 .overlay(Capsule().stroke(Color.primary.opacity(0.12)))
                 .shadow(color: .black.opacity(0.25), radius: 6, y: 2)
-                .padding(.bottom, 14)
                 .transition(.move(edge: .bottom).combined(with: .opacity))
             }
         }
+        .padding(.bottom, 14)
     }
 
     private var cancel: some View {

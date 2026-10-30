@@ -8,6 +8,7 @@ Newest first. Dates are when the change was made.
 
 ## Unreleased (since 1.5.3)
 
+- **Copying several photos** shows a capsule over the picture, "Copying 14 of 34" with a progress bar and a ✕ that stops it (nothing goes on the clipboard then); when it is done it turns green, says how many were copied and how big, and fades out.
 - **Export with nothing ticked**: the Export button no longer needs a look ticked in the LUT panel; with "each photo's own look" (the default) the ticks were never used, and with nothing ticked each photo gets its own look.
 - **⌘C with several photos selected in the grid** copies all of them, each with its own look, as files and pictures (paste them in Finder, Mail, Messages …).
 - **⌘V in the single view with the filmstrip folded** pastes onto the photo on screen only (the selection can't be seen there); otherwise it still pastes onto the selection.

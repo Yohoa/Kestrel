@@ -2957,8 +2957,17 @@ final class Model: ObservableObject {
     /// While several photos are being copied: how far it got (the progress shown with a ✕ to stop it).
     @Published var clipProgress: (done: Int, total: Int)?
     private var clipTask: Task<Void, Never>?
-    /// How the progress is shown: 0 a capsule over the picture, 1 in the status bar, 2 a panel at the top.
-    @Published var clipProgressStyle = UserDefaults.standard.integer(forKey: "copyProgressStyle")
+    /// The same capsule once it is done: green, says what was copied, then fades out.
+    @Published var clipFinished: String?
+    private var clipFinishedWork: DispatchWorkItem?
+
+    private func showClipFinished(_ text: String) {
+        clipFinishedWork?.cancel()
+        withAnimation(.easeOut(duration: 0.2)) { clipProgress = nil; clipFinished = text }
+        let w = DispatchWorkItem { [weak self] in withAnimation(.easeIn(duration: 0.4)) { self?.clipFinished = nil } }
+        clipFinishedWork = w
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.4, execute: w)
+    }
 
     func cancelClipboardCopy() {
         clipTask?.cancel()
@@ -2969,6 +2978,7 @@ final class Model: ObservableObject {
 
     func copyImageToClipboard() {
         clipTask?.cancel()
+        clipFinishedWork?.cancel(); clipFinished = nil
         let many = viewMode == .grid && selection.count > 1
         let urls = many ? files.filter(selection.contains) : (current.map { [$0] } ?? [])
         guard !urls.isEmpty else { return }
@@ -3007,9 +3017,10 @@ final class Model: ObservableObject {
             let rendered = done
             await MainActor.run {
                 guard let self else { return }
-                self.clipProgress = nil
+                if !many { self.clipProgress = nil }        // several: the capsule turns into "done" below
                 self.clipTask = nil
                 guard !rendered.isEmpty else {
+                    self.clipProgress = nil
                     self.status = "Could not render \(many ? "the selected photos" : first)"
                     self.notify(.copyPhoto, self.status, icon: "exclamationmark.triangle")
                     return
@@ -3026,7 +3037,8 @@ final class Model: ObservableObject {
                     let missed = jobs.count - rendered.count
                     self.status = "Copied \(rendered.count) edited photos, each with its own look (\(format.title), \(mb))"
                         + (missed > 0 ? " · \(missed) could not be rendered" : "")
-                    self.notify(.copyPhoto, "\(rendered.count) edited photos copied · each with its own look · \(format.title) \(mb)", icon: "doc.on.doc")
+                    // the progress capsule itself says it (no second notice below the picture)
+                    self.showClipFinished("Copied \(rendered.count) photos · \(format.title) \(mb)" + (missed > 0 ? " · \(missed) failed" : ""))
                 } else {
                     let look = jobs[0].look, size = rendered[0].size
                     let dims = "\(Int(size.width)) × \(Int(size.height))"

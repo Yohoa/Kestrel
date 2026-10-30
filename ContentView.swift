@@ -26,8 +26,7 @@ struct ContentView: View {
                     if m.leftVisible { SidebarGap(store: layout, left: true) }
                 }
                 centerArea.clipShape(RoundedRectangle(cornerRadius: 14)).padding(3)
-                    .overlay(alignment: .bottom) { ClipProgressView(m: m, style: 0) }
-                    .overlay(alignment: .top) { ClipProgressView(m: m, style: 2) }
+                    .overlay(alignment: .bottom) { ClipProgressView(m: m) }
                 if layout.rightCollapsed { if m.rightVisible { FoldedSidebar(store: layout, left: false) } else { column("right", width: 0) } }
                 else {
                     if m.rightVisible { SidebarGap(store: layout, left: false) }
