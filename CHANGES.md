@@ -8,6 +8,8 @@ Newest first. Dates are when the change was made.
 
 ## Unreleased (since 1.5.3)
 
+- **Apply mode** now saves the chosen look to each photo you open in single view, if it has no saved look yet. A photo with a different saved look keeps it, and the LUT box says so ("Kept saved look · …"; can be switched off in Settings ▸ Notices).
+- Shorter Preview / Apply / Per photo tips.
 - **LUT thumbnails** in three sizes: Large, Medium (what Small was) and a new, smaller Small (gear menu in the LUT panel, or Settings ▸ Looks).
 - Copying a single photo also shows the green "Copied …" capsule.
 - **Copying several photos** shows a capsule over the picture, "Copying 14 of 34" with a progress bar and a ✕ that stops it (nothing goes on the clipboard then); when it is done it turns green, says how many were copied and how big, and fades out.

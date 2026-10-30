@@ -781,7 +781,7 @@ final class Model: ObservableObject {
         // the grid shows no big picture: let the decoded photos go (a step back to the single view decodes the one
         // on screen again, ~0.1 s); fast browsing keeps them
         if viewMode == .grid, !fastBrowsing { bakeCache.removeAll() }
-        if viewMode == .single { scheduleRefresh() }
+        if viewMode == .single { scheduleRefresh(); applyChosenLookOnLanding() }
     }
 
     private var refreshTask: Task<Void, Never>?
@@ -1215,6 +1215,19 @@ final class Model: ObservableObject {
         notify(.lookSaved, "\(name) → \(c.lastPathComponent)", icon: "checkmark.circle.fill")
     }
 
+    /// Apply mode, single view: landing on a photo writes the chosen look to its .xmp unless it already has one;
+    /// one that has a different saved look keeps it, with a notice in the LUT box. Called only once the photo's
+    /// metadata is read, so a saved look is never overwritten before it is known.
+    func applyChosenLookOnLanding() {
+        guard lookMode == .apply, viewMode == .single, let c = current, let k = chosenLook,
+              let i = libIndex[c], library[i].metadataRead else { return }
+        if let saved = currentState.look {
+            if saved != k, let id = lookID(forKey: saved) { notify(.lookKept, "Kept saved look · \(look(id).title)", icon: "lock.fill") }
+            return
+        }
+        edit([c]) { $0.look = k }
+    }
+
     /// The look to show for the current photo, by the LUT panel's mode.
     func syncLookFromState() {
         let saved = lookMode == .preview ? nil : currentState.look.flatMap(lookID(forKey:))
@@ -1562,6 +1575,7 @@ final class Model: ObservableObject {
         // the current photo's saved look just arrived (from whichever read got there first): render it now
         if let c = current, landedURLs.contains(c) {
             syncLookFromState()
+            applyChosenLookOnLanding()
             if viewMode == .single { refreshAll() }
         }
         // background batches land many times a second while a big folder is read: one recompute per 0.1 s
@@ -2391,6 +2405,7 @@ final class Model: ObservableObject {
         if let e = exifCache[url] { exifLines = e.lines; imageSize = e.size } else { exifLines = []; imageSize = "" }
         let waiting = readMetadataSoon(url)                // rating, label and saved look before the real render
         syncLookFromState()
+        if !waiting { applyChosenLookOnLanding() }
         loadXMPPanel()
         if viewMode == .single {
             showPlaceholder(url)

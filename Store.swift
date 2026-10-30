@@ -340,7 +340,7 @@ struct WBPreset: Identifiable {
 /// How choosing a look in the LUT panel behaves (the LUT panel's three-way switch).
 enum LookMode: String, CaseIterable, Identifiable {
     case preview        // the chosen look is shown on every photo; nothing is written, saved looks are not shown
-    case apply          // choosing writes the look to the photo's .xmp; photos without one show the last chosen look
+    case apply          // choosing writes the look to the photo's .xmp; in single view, opening a photo without one writes it too
     case perPhoto       // each photo shows the look in its .xmp, or Base when it has none; choosing writes it
     var id: String { rawValue }
     var title: String {
@@ -348,9 +348,9 @@ enum LookMode: String, CaseIterable, Identifiable {
     }
     var help: String {
         switch self {
-        case .preview: "Preview: the chosen look is shown on every photo and nothing is written to the .xmp"
-        case .apply: "Apply: the chosen look is written to the photo's .xmp and stays chosen for photos without a saved look"
-        case .perPhoto: "Per photo: each photo shows the look saved in its .xmp, or Base when there is none; choosing a look writes it"
+        case .preview: "Preview: shown on every photo, nothing saved"
+        case .apply: "Apply: saved to each photo you open, saved looks kept"
+        case .perPhoto: "Per photo: each photo's saved look, or Base"
         }
     }
 }

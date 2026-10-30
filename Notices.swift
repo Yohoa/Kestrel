@@ -11,13 +11,13 @@ enum NoticeKind: String, CaseIterable, Identifiable {
     case export, copyPhoto, batchExport, rating, label, moveRejected, undoRedo
     case autoExposure, whiteBalance, copyPaste, lookStep, filter, overlay, foldersRefreshed, folderRenamed, panelHidden
     // in the LUT box
-    case lookSaved, lutsLoaded, favourite, lutInput, lookMode
+    case lookSaved, lookKept, lutsLoaded, favourite, lutInput, lookMode
 
     var id: String { rawValue }
 
     var place: NoticePlace {
         switch self {
-        case .lookSaved, .lutsLoaded, .favourite, .lutInput, .lookMode: .lut
+        case .lookSaved, .lookKept, .lutsLoaded, .favourite, .lutInput, .lookMode: .lut
         default: .picture
         }
     }
@@ -42,6 +42,7 @@ enum NoticeKind: String, CaseIterable, Identifiable {
         case .folderRenamed: "Folder renamed"
         case .panelHidden: "A panel closed (and how to get it back)"
         case .lookSaved: "Look saved to a photo (double-click)"
+        case .lookKept: "Apply mode kept a photo's saved look"
         case .lutsLoaded: "LUTs loaded, new LUTs found"
         case .favourite: "Favourite look added / removed"
         case .lutInput: "LUT input space changed"
