@@ -6,6 +6,10 @@ Newest first. Dates are when the change was made.
 
 - **Import your own LUTs**: choose a folder of `.cube` files again, with a way to set the input space (camera log) of a LUT whose name doesn't say it. Overrides kept outside the app (never inside it).
 
+## Unreleased (since 1.6)
+
+- **Folders**: the ▸ that shows a folder's subfolders is much easier to hit (the whole square around it, not just the arrow's pixels); a near miss no longer opens the folder.
+
 ## 1.6 — 2026-10-31
 
 - **The .xmp copied next to an export** no longer carries Kestrel's develop settings or rotation (they are baked into the picture); a copy from an earlier version is recognised by its `SidecarForExtension` and its settings are ignored, so an export opened in Kestrel doesn't get its look and exposure twice.

@@ -221,6 +221,12 @@ struct FolderTreeRow: View {
                     } label: {
                         Image(systemName: expanded ? "chevron.down" : "chevron.right")
                             .font(.system(size: 9, weight: .bold)).foregroundStyle(.secondary).frame(width: 14, height: 14)
+                            // a plain button only takes clicks on the glyph's own pixels: the whole square counts,
+                            // reaching into the indent on the left and the row's padding above and below, without
+                            // moving anything
+                            .padding(EdgeInsets(top: 3, leading: 10, bottom: 3, trailing: 3))
+                            .contentShape(Rectangle())
+                            .padding(EdgeInsets(top: -3, leading: -10, bottom: -3, trailing: -3))
                     }
                     .buttonStyle(.plain)
                     .help(expanded ? "Collapse" : "Show the subfolders")
