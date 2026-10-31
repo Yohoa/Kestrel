@@ -211,7 +211,8 @@ struct PanelCommands: Commands {
             Button("Zoom Out") { m.zoomStep(-1) }.keyboardShortcut("-", modifiers: .command)
             Button("Fit to Window") { m.zoomToFit() }.keyboardShortcut("0", modifiers: .command)
             Button("Actual Pixels (100%)") { m.zoomTo100() }.keyboardShortcut("1", modifiers: .command)
-            Button("Smart Zoom (Toggle)    Z") { m.toggleZoom() }
+            Button("Zoom to Subject (Toggle)    Z") { m.zoomToSubject() }
+            Button("Smart Zoom (Toggle)    ⇧Z") { m.toggleZoom() }
             Divider()
             Toggle("Overexposure Display    O", isOn: Binding(get: { m.showOver }, set: { _ in m.toggleOver() }))
             Toggle("Underexposure Display    U", isOn: Binding(get: { m.showUnder }, set: { _ in m.toggleUnder() }))

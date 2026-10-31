@@ -1343,20 +1343,12 @@ final class Model: ObservableObject {
         })
     }
 
-    /// ⇧Z: zoom onto the main subject Vision found (fit again when zoomed).
+    /// Z: zoom onto the main subject Vision found (fit again when zoomed). Without content analysis, or with no
+    /// clear subject, it is the plain smart zoom (⇧Z), so Z always zooms.
     func zoomToSubject() {
         guard viewMode == .single, current != nil else { return }
         if zoomed { unzoomAnimated(); return }
-        guard contentAnalysisOn else {
-            status = "⇧Z zooms to the subject: switch on Settings ▸ Content analysis"
-            notify(.panelHidden, status, icon: "viewfinder")
-            return
-        }
-        guard let box = contentInfo?.subject else {
-            status = contentBusy ? "Still looking for the subject…" : "No clear subject found: Z zooms to the middle"
-            notify(.panelHidden, status, icon: "viewfinder")
-            return
-        }
+        guard contentAnalysisOn, let box = contentInfo?.subject else { toggleZoom(); return }
         // the subject with a margin fills the view; at least the smart zoom, at most 100 %
         let full = fullSizePt
         let fitBox = min(viewSize.width / (box.width * full.width), viewSize.height / (box.height * full.height)) * 0.85
@@ -2862,7 +2854,7 @@ final class Model: ObservableObject {
         return min((viewSize.width - 12) / (px.width / b), (viewSize.height - 12) / (px.height / b))
     }
 
-    /// The "just right" zoom for a double-click / Z: the smallest standard step (25, 33, 50, 67, 100 %) that is at
+    /// The "just right" zoom for a double-click / ⇧Z: the smallest standard step (25, 33, 50, 67, 100 %) that is at
     /// least `smartZoomFactor` × the fit size, never above 100 %. It roughly doubles what you see instead of leaping
     /// to a 1:1 crop; on a big screen where fit is already ≥ 50 % it is simply 100 %.
     var smartZoomScale: Double {
@@ -2968,7 +2960,7 @@ final class Model: ObservableObject {
 
     func dragZoomEnded() { pinch(0, at: CGPoint(x: viewSize.width / 2, y: viewSize.height / 2), ended: true) }
 
-    /// Double-click / Z / status-bar indicator: fit ↔ smart zoom.
+    /// Double-click / ⇧Z / status-bar indicator (and Z without a subject): fit ↔ smart zoom.
     func toggleZoom(atFit point: CGPoint? = nil) {
         if zoomed { unzoomAnimated() } else { zoom(to: smartZoomScale, atFit: point) }
     }

@@ -14,7 +14,6 @@ enum Shortcuts {
             ("Return", "Grid → the photo in single view; single view → back to the grid"),
             ("Swipe, flick", "Two fingers sideways, or a quick sideways drag, on the photo: previous / next"),
             ("Home  End", "First / last photo"),
-            ("⇧Z", "Zoom onto the photo's main subject (needs Settings ▸ Content analysis); again: fit"),
             ("Page Up  Page Down", "Grid: a screenful up / down, same column. Single view: previous / next photo. With ⇧: extends the selection"),
             ("↑ ↓", "One row up / down in the grid"),
             ("G", "Image grid ↔ single image"),
@@ -56,7 +55,8 @@ enum Shortcuts {
             ("L", "Add / remove the current look from the favourites"),
         ]),
         ("View", [
-            ("Z, double-click", "Smart zoom: fit ↔ the smallest of 25/33/50/67/100 % that is ≥ 2 × the fit size (Settings); double-click zooms on that spot"),
+            ("Z", "Zoom onto the photo's main subject (Settings ▸ Content analysis); without it, or with no clear subject, as ⇧Z. Again: fit"),
+            ("⇧Z, double-click", "Smart zoom: fit ↔ the smallest of 25/33/50/67/100 % that is ≥ 2 × the fit size (Settings), on the middle; double-click zooms on that spot"),
             ("⌘1  ⌘0  ⌘+  ⌘−", "100 % / fit to window / next / previous zoom step"),
             ("Pinch, ⌥/⌘ + scroll", "Zoom at the pointer; or drag the Fit / % label in the status bar sideways"),
             ("O  U", "Over-exposure (red) / under-exposure (blue) display"),
@@ -200,8 +200,8 @@ extension Model {
         switch (ch, shift) {
         case ("x", false): setRating(-1)
         case ("g", false): toggleGrid()
-        case ("z", false): toggleZoom()
-        case ("z", true): zoomToSubject()                                 // the subject Vision found (Content panel)
+        case ("z", false): zoomToSubject()                                // the subject Vision found, else the middle
+        case ("z", true): toggleZoom()                                    // smart zoom on the middle
         case ("f", false): toggleFullScreen()
         case ("o", false): toggleOver()
         case ("u", false): toggleUnder()

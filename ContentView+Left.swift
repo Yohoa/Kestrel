@@ -169,7 +169,7 @@ extension ContentView {
                     }
                     HStack(alignment: .firstTextBaseline) {
                         Text("Subject").foregroundStyle(.secondary).frame(width: 62, alignment: .leading)
-                        Text(i.subject == nil ? "None clear" : "Found · ⇧Z zooms to it")
+                        Text(i.subject == nil ? "None clear" : "Found · Z zooms to it")
                     }
                     HStack(alignment: .firstTextBaseline) {
                         Text("Shows").foregroundStyle(.secondary).frame(width: 62, alignment: .leading)
