@@ -404,7 +404,7 @@ final class Model: ObservableObject {
     }
 
     // Rendering
-    @Published var preview: NSImage?
+    @Published var preview: NSImage? { didSet { if zoomed, preview != nil { reclampPan() } } }
     @Published var previewError: String?
     @Published var overlay: NSImage?
     @Published var showOver = false
@@ -426,7 +426,7 @@ final class Model: ObservableObject {
     private let contentCache = LRU<String, ContentInfo>(limit: 512)
     private var contentSaved: Set<String> = []          // analyses already in the photo's .xmp (photo#turn)
     private let contentQueue = DispatchQueue(label: "kestrel.content", qos: .utility)
-    @Published var imageSize = ""
+    @Published var imageSize = "" { didSet { if zoomed, imageSize != oldValue { reclampPan() } } }
 
     // Zoom / pan
     /// Scale and pan change on every trackpad event; they live in their own object so that only the zoomed
@@ -1312,7 +1312,7 @@ final class Model: ObservableObject {
     func analyzeContent() {
         guard contentAnalysisOn, let c = current else { contentInfo = nil; contentBusy = false; return }
         let rot = currentState.rot, key = contentKey(c, rot)
-        if let hit = contentCache[key] { contentInfo = hit; contentBusy = false; return }
+        if let hit = contentCache[key] { contentInfo = hit; contentBusy = false; followSubject(); return }
         contentInfo = nil
         contentBusy = true
         contentQueue.async { [weak self] in
@@ -1324,6 +1324,7 @@ final class Model: ObservableObject {
                     guard self.current == c, self.currentState.rot == rot else { return }
                     self.contentInfo = info
                     self.contentBusy = false
+                    self.followSubject()
                 }
             }
         }
@@ -1349,11 +1350,32 @@ final class Model: ObservableObject {
         guard viewMode == .single, current != nil else { return }
         if zoomed { unzoomAnimated(); return }
         guard contentAnalysisOn, let box = contentInfo?.subject else { toggleZoom(); return }
-        // the subject with a margin fills the view; at least the smart zoom, at most 100 %
+        zoom(to: subjectScale(box), centreOn: CGPoint(x: box.midX, y: box.midY))
+        zoomFollowsSubject = true
+    }
+
+    /// The subject with a margin fills the view; at least the smart zoom, at most 100 %.
+    private func subjectScale(_ box: CGRect) -> Double {
         let full = fullSizePt
         let fitBox = min(viewSize.width / (box.width * full.width), viewSize.height / (box.height * full.height)) * 0.85
-        let scale = min(max(fitBox, smartZoomScale), 1)
-        zoom(to: scale, centreOn: CGPoint(x: box.midX, y: box.midY))
+        return min(max(fitBox, smartZoomScale), 1)
+    }
+
+    /// A zoom made by Z follows to the next photo's subject once that is known (other zooms keep their place).
+    private var zoomFollowsSubject = false
+
+    private func followSubject() {
+        guard zoomed, zoomFollowsSubject, viewMode == .single, let box = contentInfo?.subject else { return }
+        zoom(to: subjectScale(box), centreOn: CGPoint(x: box.midX, y: box.midY))
+        zoomFollowsSubject = true                          // zoom() clears it
+    }
+
+    /// After a photo change while zoomed: the pan kept from the previous photo may lie past this one's edges
+    /// (portrait after landscape, or another size) and showed the black around it.
+    private func reclampPan() {
+        guard !imageSize.isEmpty else { return }           // the size isn't known yet: it would clamp to a guess
+        let c = clampedPan(zoomState.offset)
+        if c != zoomState.offset { zoomState.offset = c }
     }
 
     /// Apply mode, single view: landing on a photo writes the chosen look to its .xmp unless it already has one;
@@ -2866,7 +2888,7 @@ final class Model: ObservableObject {
     var zoomLabel: String { zoomed ? "\(Int((zoomScale * 100).rounded())) %" : "Fit" }
 
     func unzoom() {
-        zoomed = false; zoomImage = nil; zoomImageScale = 0; unzooming = false
+        zoomed = false; zoomImage = nil; zoomImageScale = 0; unzooming = false; zoomFollowsSubject = false
         pinchRender?.cancel(); unzoomGen += 1; RenderScheduler.shared.bumpZoom()
     }
 
@@ -2898,6 +2920,7 @@ final class Model: ObservableObject {
     /// view's top-left: the click or the fingers) where it is, otherwise keeping the current centre.
     func zoom(to scale: Double, atFit point: CGPoint? = nil, centreOn uv: CGPoint? = nil) {
         guard current != nil, viewMode == .single else { return }
+        zoomFollowsSubject = false
         let fit = fitScale
         if scale <= fit + 1e-6 { unzoomAnimated(); return }
         unzoomGen += 1; unzooming = false                          // cancels an unzoom still animating
@@ -2937,7 +2960,7 @@ final class Model: ObservableObject {
             zoomState.scale = fit; zoomState.offset = .zero
             zoomed = true
         }
-        unzoomGen += 1; unzooming = false
+        unzoomGen += 1; unzooming = false; zoomFollowsSubject = false
         let old = zoomScale
         let new = min(max(old * (1 + magnification), fit), Model.maxZoom)
         let f = new / old
