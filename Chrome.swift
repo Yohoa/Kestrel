@@ -43,12 +43,13 @@ extension View {
 // MARK: - Panels
 
 enum Panel: String, CaseIterable, Identifiable {
-    case histogram, exif, stats, xmp, filmstrip, folders, favorites, filter, looks, whiteBalance, develop
+    case histogram, exif, content, stats, xmp, filmstrip, folders, favorites, filter, looks, whiteBalance, develop
     var id: String { rawValue }
     var title: String {
         switch self {
         case .histogram: "Histogram"
         case .exif: "EXIF"
+        case .content: "Content"
         case .stats: "Exposure Stats"
         case .xmp: "XMP Metadata"
         case .filmstrip: "Filmstrip"
@@ -64,7 +65,7 @@ enum Panel: String, CaseIterable, Identifiable {
     var fKey: Int {
         switch self {
         case .histogram: 2
-        case .exif: 3
+        case .exif, .content: 3
         case .stats: 4
         case .xmp: 5
         case .filmstrip: 6
@@ -78,7 +79,7 @@ enum Panel: String, CaseIterable, Identifiable {
 
 extension Panel {
     /// ⇧ + function key (FastRawViewer: ⇧F7 favourite folders; here also ⇧F8 Sort & Filter, F8 being the LUT panel).
-    var needsShift: Bool { self == .favorites || self == .filter }
+    var needsShift: Bool { self == .favorites || self == .filter || self == .content }
 }
 
 func functionKey(_ n: Int) -> KeyEquivalent {

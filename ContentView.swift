@@ -102,6 +102,7 @@ struct ContentView: View {
         case .favorites: return .fixed(104)
         case .filter: return .fixed(CGFloat(m.layoutStore.contentHeights["filter"].map { $0 + 34 } ?? 320))   // + title, padding
         case .exif: return .fixed(174)                 // the seven lines without scrolling
+        case .content: return .intrinsic
         case .xmp: return .fixed(280)
         case .histogram: return .fixed(118)
         case .stats: return .intrinsic                // its four rows: a fixed 96 pt cut the B row off
@@ -117,6 +118,7 @@ struct ContentView: View {
         case .favorites: favoritesPanel
         case .filter: filterPanel
         case .exif: exifPanel
+        case .content: contentPanel
         case .xmp: xmpPanel
         case .histogram: PanelBox("Histogram", panel: .histogram, onClose: { m.toggle(.histogram) }) { histogramView }
         case .stats: PanelBox("Exposure Stats", panel: .stats, onClose: { m.toggle(.stats) }) { statsView }

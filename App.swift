@@ -412,6 +412,19 @@ final class Model: ObservableObject {
     @Published var thumbs: [Int: NSImage] = [:]
     @Published var hist: HistogramData?
     @Published var exifLines: [(String, String)] = []
+    @Published var contentInfo: ContentInfo?           // the photo on screen's, once analysed
+    @Published var contentBusy = false
+    /// Settings ▸ Content analysis: what's in the photo on screen (Vision, on this Mac). Off by default.
+    @Published var contentAnalysisOn = UserDefaults.standard.bool(forKey: ContentAnalysis.settingKey) {
+        didSet {
+            guard contentAnalysisOn != oldValue else { return }
+            UserDefaults.standard.set(contentAnalysisOn, forKey: ContentAnalysis.settingKey)
+            if contentAnalysisOn { hiddenPanels.remove(Panel.content.rawValue); analyzeContent() }
+            else { hiddenPanels.insert(Panel.content.rawValue); contentInfo = nil; contentBusy = false }
+        }
+    }
+    private let contentCache = LRU<String, ContentInfo>(limit: 64)
+    private let contentQueue = DispatchQueue(label: "kestrel.content", qos: .utility)
     @Published var imageSize = ""
 
     // Zoom / pan
@@ -521,7 +534,7 @@ final class Model: ObservableObject {
 
     // Layout: which panels are in which column, which are torn off into their own windows
     static let defaultLayout: [String: [String]] = [
-        "left": ["folders", "favorites", "filter", "exif", "xmp"],
+        "left": ["folders", "favorites", "filter", "exif", "content", "xmp"],
         "right": ["histogram", "stats", "develop", "whiteBalance", "looks"],
     ]
     @Published var layout: [String: [String]] = Model.loadLayout()
@@ -544,7 +557,8 @@ final class Model: ObservableObject {
 
     // Layout
     /// Exposure Stats starts hidden (the histogram says most of it; Panels menu or F4 shows it).
-    @Published var hiddenPanels: Set<String> = Set(UserDefaults.standard.stringArray(forKey: "hiddenPanels") ?? [Panel.stats.rawValue]) {
+    /// Content shows itself when Settings ▸ Content analysis is switched on.
+    @Published var hiddenPanels: Set<String> = Model.loadHiddenPanels() {
         didSet { UserDefaults.standard.set(Array(hiddenPanels), forKey: "hiddenPanels") }
     }
     /// LUT thumbnail size: 2 large, 3 medium, 4 small.
@@ -697,6 +711,16 @@ final class Model: ObservableObject {
     var leftVisible: Bool { columnVisible("left") }
     var rightVisible: Bool { columnVisible("right") }
 
+    private static func loadHiddenPanels() -> Set<String> {
+        var h = Set(UserDefaults.standard.stringArray(forKey: "hiddenPanels") ?? [Panel.stats.rawValue])
+        // the Content panel is new in 1.7: hidden until its setting is switched on, for layouts saved before it too
+        if !UserDefaults.standard.bool(forKey: "contentPanelIntroduced") {
+            UserDefaults.standard.set(true, forKey: "contentPanelIntroduced")
+            if !UserDefaults.standard.bool(forKey: ContentAnalysis.settingKey) { h.insert(Panel.content.rawValue) }
+        }
+        return h
+    }
+
     private static func loadLayout() -> [String: [String]] {
         guard let saved = UserDefaults.standard.dictionary(forKey: "panelLayout") as? [String: [String]] else { return defaultLayout }
         return sanitized(saved)
@@ -730,6 +754,7 @@ final class Model: ObservableObject {
     func resetLayout() {
         layout = Self.defaultLayout
         hiddenPanels = hiddenPanels.filter { $0 == Panel.filmstrip.rawValue }.union([Panel.stats.rawValue])   // the defaults
+        if !contentAnalysisOn { hiddenPanels.insert(Panel.content.rawValue) }
         for k in Array(panelWindows.keys) { panelWindows[k]?.close() }
         saveLayout()
     }
@@ -744,6 +769,7 @@ final class Model: ObservableObject {
         case .whiteBalance: NSSize(width: 400, height: 220)
         case .looks: NSSize(width: 440, height: 620)
         case .exif: NSSize(width: 320, height: 240)
+        case .content: NSSize(width: 320, height: 200)
         case .xmp: NSSize(width: 360, height: 460)
         case .folders: NSSize(width: 320, height: 520)
         case .favorites: NSSize(width: 320, height: 200)
@@ -914,6 +940,7 @@ final class Model: ObservableObject {
         status = (d > 0 ? "Rotated right: " : "Rotated left: ") + what
         notify(.rotate, status, icon: d > 0 ? "rotate.right" : "rotate.left")
         refreshAll()
+        if let c = current, ts.contains(c) { analyzeContent() }
     }
 
     // Slider drags: the value lives here while the knob moves (live preview, no undo step / save per tick),
@@ -1261,6 +1288,7 @@ final class Model: ObservableObject {
 
     /// The photo on screen is known (its metadata read): the things that happen on opening a photo.
     func photoOpened() {
+        analyzeContent()
         saveStdAdjustFix()
         applyChosenLookOnLanding()
     }
@@ -1275,6 +1303,50 @@ final class Model: ObservableObject {
         scheduleSave()
         let adj = stdAdjustEV[c] ?? 0
         notify(.autoExposure, String(format: "Exposure Std. Adjust %+.1f EV on the camera: %+.1f EV saved", adj, -adj), icon: "plusminus.circle")
+    }
+
+    private func contentKey(_ u: URL, _ rot: Int) -> String { "\(u.path)#\(rot)" }
+
+    /// The Content panel: labels, aesthetics and subject of the photo on screen, once it has been stopped on.
+    func analyzeContent() {
+        guard contentAnalysisOn, let c = current else { contentInfo = nil; contentBusy = false; return }
+        let rot = currentState.rot, key = contentKey(c, rot)
+        if let hit = contentCache[key] { contentInfo = hit; contentBusy = false; return }
+        contentInfo = nil
+        contentBusy = true
+        contentQueue.async { [weak self] in
+            let info = ContentAnalysis.analyze(c, rot: rot)
+            DispatchQueue.main.async {
+                MainActor.assumeIsolated {
+                    guard let self else { return }
+                    if let info { self.contentCache[key] = info }
+                    guard self.current == c, self.currentState.rot == rot else { return }
+                    self.contentInfo = info
+                    self.contentBusy = false
+                }
+            }
+        }
+    }
+
+    /// ⇧Z: zoom onto the main subject Vision found (fit again when zoomed).
+    func zoomToSubject() {
+        guard viewMode == .single, current != nil else { return }
+        if zoomed { unzoomAnimated(); return }
+        guard contentAnalysisOn else {
+            status = "⇧Z zooms to the subject: switch on Settings ▸ Content analysis"
+            notify(.panelHidden, status, icon: "viewfinder")
+            return
+        }
+        guard let box = contentInfo?.subject else {
+            status = contentBusy ? "Still looking for the subject…" : "No clear subject found: Z zooms to the middle"
+            notify(.panelHidden, status, icon: "viewfinder")
+            return
+        }
+        // the subject with a margin fills the view; at least the smart zoom, at most 100 %
+        let full = fullSizePt
+        let fitBox = min(viewSize.width / (box.width * full.width), viewSize.height / (box.height * full.height)) * 0.85
+        let scale = min(max(fitBox, smartZoomScale), 1)
+        zoom(to: scale, centreOn: CGPoint(x: box.midX, y: box.midY))
     }
 
     /// Apply mode, single view: landing on a photo writes the chosen look to its .xmp unless it already has one;
@@ -2471,6 +2543,7 @@ final class Model: ObservableObject {
         guard let url else { exifLines = []; imageSize = ""; RenderScheduler.shared.setNeighbours([]); return }
         if let f = currentFolder { UserDefaults.standard.set(url.lastPathComponent, forKey: "last:" + f.path) }
         if let e = exifCache[url] { exifLines = e.lines; imageSize = e.size } else { exifLines = []; imageSize = "" }
+        contentInfo = contentAnalysisOn ? contentCache[contentKey(url, currentState.rot)] : nil
         let waiting = readMetadataSoon(url)                // rating, label and saved look before the real render
         syncLookFromState()
         if !waiting { schedulePhotoOpened() }
@@ -2815,7 +2888,7 @@ final class Model: ObservableObject {
 
     /// Zooms to `scale` (fraction of 100 %) with a short animation, keeping the spot under `point` (points from the
     /// view's top-left: the click or the fingers) where it is, otherwise keeping the current centre.
-    func zoom(to scale: Double, atFit point: CGPoint? = nil) {
+    func zoom(to scale: Double, atFit point: CGPoint? = nil, centreOn uv: CGPoint? = nil) {
         guard current != nil, viewMode == .single else { return }
         let fit = fitScale
         if scale <= fit + 1e-6 { unzoomAnimated(); return }
@@ -2824,8 +2897,12 @@ final class Model: ObservableObject {
         if !wasZoomed { zoomState.scale = fit; zoomState.offset = .zero; zoomed = true }
         let old = zoomScale, new = min(scale, Model.maxZoom), f = new / old
         let c = point.map { CGSize(width: $0.x - viewSize.width / 2, height: $0.y - viewSize.height / 2) } ?? .zero
-        let target = clampedPan(CGSize(width: (panOffset.width - c.width) * f + c.width,
+        var target = clampedPan(CGSize(width: (panOffset.width - c.width) * f + c.width,
                                        height: (panOffset.height - c.height) * f + c.height), scale: new)
+        if let uv {                        // a spot of the picture (0…1 from the top-left) to the middle of the view
+            let full = fullSizePt
+            target = clampedPan(CGSize(width: -(uv.x - 0.5) * full.width * new, height: -(uv.y - 0.5) * full.height * new), scale: new)
+        }
         let url = current
         let go = { [weak self] in
             guard let self, self.zoomed, self.current == url else { return }      // not if the photo changed meanwhile

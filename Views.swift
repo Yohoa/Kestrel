@@ -195,6 +195,11 @@ struct SettingsView: View {
                 Text("Smart zoom = the smallest of 25 / 33 / 50 / 67 / 100 % that is at least this many times the fit-to-window size, never above 100 %. ⌘1 is always exactly 100 %.")
                     .font(.caption).foregroundStyle(.secondary)
             }
+            Section("Content analysis") {
+                Toggle("Recognise what's in the photo", isOn: $m.contentAnalysisOn)
+                Text("For the photo on screen only, on this Mac (Apple's Vision, on the Neural Engine): what it shows, an aesthetics score (macOS 15+) and its main subject, in the Content panel (⇧F3). ⇧Z zooms onto the subject. Nothing is written to the .xmp.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
             Section("Exposure") {
                 Toggle("Undo Sony's Exposure Std. Adjust", isOn: $m.undoStdAdjust)
                 Text("A photo shot with Exposure Std. Adjust set (e.g. −1 EV) starts with the opposite exposure (+1 EV), saved to its .xmp when you open it. Photos that already have an exposure are left alone.")

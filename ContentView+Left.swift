@@ -138,6 +138,64 @@ extension ContentView {
         }
     }
 
+    // MARK: Content panel
+
+    var contentPanel: some View {
+        PanelBox("Content", panel: .content, onClose: { m.toggle(.content) }) {
+            VStack(alignment: .leading, spacing: 5) {
+                if !m.contentAnalysisOn {
+                    Text("Recognises what the photo on screen shows, on this Mac.").foregroundStyle(.secondary)
+                    Button("Turn On") { m.contentAnalysisOn = true }.controlSize(.small)
+                } else if let i = m.contentInfo {
+                    if let a = i.aesthetics {
+                        HStack(spacing: 6) {
+                            Text("Aesthetics").foregroundStyle(.secondary).frame(width: 62, alignment: .leading)
+                            GeometryReader { g in
+                                ZStack(alignment: .leading) {
+                                    Capsule().fill(Color.primary.opacity(0.12))
+                                    Capsule().fill(a >= 0 ? Color.green.opacity(0.75) : Color.orange.opacity(0.8))
+                                        .frame(width: g.size.width * CGFloat((a + 1) / 2))
+                                }
+                            }
+                            .frame(height: 6)
+                            Text(String(format: "%+.2f", a)).monospacedDigit().frame(width: 38, alignment: .trailing)
+                        }
+                        .help("Apple's aesthetics score, −1 to +1: how well taken and composed the photo looks")
+                    }
+                    if i.utility {
+                        Label("Utility photo (screenshot, document, receipt …)", systemImage: "doc.text.viewfinder")
+                            .foregroundStyle(.orange)
+                            .help("Vision thinks this is a photo of something to remember, not a memorable photo")
+                    }
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Subject").foregroundStyle(.secondary).frame(width: 62, alignment: .leading)
+                        Text(i.subject == nil ? "None clear" : "Found · ⇧Z zooms to it")
+                    }
+                    HStack(alignment: .firstTextBaseline) {
+                        Text("Shows").foregroundStyle(.secondary).frame(width: 62, alignment: .leading)
+                        if i.labels.isEmpty { Text("Nothing it is sure of").foregroundStyle(.secondary) }
+                        else {
+                            i.labels.enumerated().reduce(Text("")) { t, e in
+                                t + Text(e.offset == 0 ? "" : ", ") + Text(e.element.name)
+                                    + Text(" \(Int((e.element.confidence * 100).rounded()))%").foregroundColor(.secondary)
+                            }
+                            .textSelection(.enabled)
+                        }
+                    }
+                    .help("Apple's Vision labels with how sure it is; only those right at least 90 % of the time are shown")
+                } else if m.contentBusy {
+                    HStack(spacing: 6) { ProgressView().controlSize(.mini); Text("Looking…").foregroundStyle(.secondary) }
+                } else if m.current != nil {
+                    Text("Shown once a photo is opened").foregroundStyle(.secondary)
+                } else {
+                    Text("No photo").foregroundStyle(.secondary)
+                }
+            }
+            .font(.system(size: 11))
+            .padding(8).frame(maxWidth: .infinity, alignment: .leading)
+        }
+    }
+
     // MARK: XMP panel
 
     var xmpPanel: some View {

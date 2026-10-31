@@ -14,6 +14,7 @@ enum Shortcuts {
             ("Return", "Grid → the photo in single view; single view → back to the grid"),
             ("Swipe, flick", "Two fingers sideways, or a quick sideways drag, on the photo: previous / next"),
             ("Home  End", "First / last photo"),
+            ("⇧Z", "Zoom onto the photo's main subject (needs Settings ▸ Content analysis); again: fit"),
             ("Page Up  Page Down", "Grid: a screenful up / down, same column. Single view: previous / next photo. With ⇧: extends the selection"),
             ("↑ ↓", "One row up / down in the grid"),
             ("G", "Image grid ↔ single image"),
@@ -200,6 +201,7 @@ extension Model {
         case ("x", false): setRating(-1)
         case ("g", false): toggleGrid()
         case ("z", false): toggleZoom()
+        case ("z", true): zoomToSubject()                                 // the subject Vision found (Content panel)
         case ("f", false): toggleFullScreen()
         case ("o", false): toggleOver()
         case ("u", false): toggleUnder()

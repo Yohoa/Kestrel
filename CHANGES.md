@@ -8,6 +8,7 @@ Newest first. Dates are when the change was made.
 
 ## Unreleased (since 1.6)
 
+- **Content analysis** (Settings ▸ Content analysis, off by default): for the photo on screen, Apple's Vision on this Mac (the Neural Engine) says what it shows ("Cat 83%, Food 79%" …), gives an aesthetics score from −1 to +1 and flags utility shots such as screenshots or receipts (macOS 15+), and finds the main subject. A new **Content** panel (⇧F3) shows it; **⇧Z** zooms onto the subject. It runs once you stop on a photo (about 25 ms, from the embedded preview), never for a whole folder, and writes nothing.
 - **Folders**: the ▸ that shows a folder's subfolders is much easier to hit (the whole square around it, not just the arrow's pixels); a near miss no longer opens the folder.
 
 ## 1.6 — 2026-10-31
