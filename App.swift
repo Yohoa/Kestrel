@@ -1389,6 +1389,24 @@ final class Model: ObservableObject {
         return min(max(fitBox, smartZoomScale), 1)
     }
 
+    /// A normal zoom carried to the next photo: the spot of the picture (0…1 from its top-left) at the middle of
+    /// the view. Re-applied as the new photo's shape and size become known, then dropped (or when moved by hand).
+    private var carryCentre: CGPoint?
+
+    private func zoomCentre() -> CGPoint {
+        let full = fullSizePt, s = zoomScale
+        guard full.width > 0, full.height > 0, s > 0 else { return CGPoint(x: 0.5, y: 0.5) }
+        return CGPoint(x: 0.5 - panOffset.width / (full.width * s), y: 0.5 - panOffset.height / (full.height * s))
+    }
+
+    private func applyCarry() {
+        guard zoomed, let c = carryCentre else { return }
+        let full = fullSizePt, s = zoomScale
+        let o = clampedPan(CGSize(width: -(c.x - 0.5) * full.width * s, height: -(c.y - 0.5) * full.height * s))
+        if o != zoomState.offset { zoomState.offset = o }
+        if !imageSize.isEmpty, preview != nil, !previewIsPlaceholder { carryCentre = nil }   // the real size and shape: done
+    }
+
     /// A zoom made by Z: changing photos goes back to fit at once (keeping a place that belongs to another photo
     /// glitched), and zooms in again onto the new photo's subject once that photo is settled on, its picture is
     /// rendered and its subject is known (the middle when it has none). Other zooms keep their place.
@@ -1410,6 +1428,7 @@ final class Model: ObservableObject {
     /// After a photo change while zoomed: the pan kept from the previous photo may lie past this one's edges
     /// (portrait after landscape, or another size) and showed the black around it.
     private func reclampPan() {
+        if carryCentre != nil { applyCarry(); return }
         guard !imageSize.isEmpty else { return }           // the size isn't known yet: it would clamp to a guess
         let c = clampedPan(zoomState.offset)
         if c != zoomState.offset { zoomState.offset = c }
@@ -2200,6 +2219,7 @@ final class Model: ObservableObject {
         if !zoomed && momentum && !(abs(dx) > abs(dy) && !swipeStepped) { return }
         if zoomed {
             guard !unzooming else { return }      // a two-finger double-tap also sends empty scroll events
+            if dx != 0 || dy != 0 { zoomFollow = .none; carryCentre = nil }   // moved by hand: kept as it is from now on
             zoomState.offset = clampedPan(CGSize(width: panOffset.width + dx, height: panOffset.height + dy))
             return
         }
@@ -2593,6 +2613,7 @@ final class Model: ObservableObject {
         RenderScheduler.shared.bumpPhoto()                 // everything queued for the old photo is skipped at dequeue
         watchdogTask?.cancel()
         if zoomed && zoomFollow != .none { followAfterFit = zoomFollow; unzoom(); pendingSubjectZoom = true }   // fit now, back in on this photo
+        else if zoomed { carryCentre = zoomCentre() }       // a normal zoom: same ratio, the same spot of the next photo
         current = url
         Model.ioCurrent.set(url)
         thumbs = [:]
@@ -2611,6 +2632,8 @@ final class Model: ObservableObject {
         guard let url else { exifLines = []; imageSize = ""; RenderScheduler.shared.setNeighbours([]); return }
         if let f = currentFolder { UserDefaults.standard.set(url.lastPathComponent, forKey: "last:" + f.path) }
         if let e = exifCache[url] { exifLines = e.lines; imageSize = e.size } else { exifLines = []; imageSize = "" }
+        if zoomed, filmThumbs.images[url] != nil { preview = filmThumbs.image(url, rot: currentState.rot); previewIsPlaceholder = true }   // no blank frame
+        if carryCentre != nil { applyCarry() }
         settledOn = nil
         contentInfo = contentAnalysisOn ? contentCache[contentKey(url, currentState.rot)] : nil
         let waiting = readMetadataSoon(url)                // rating, label and saved look before the real render
@@ -2960,7 +2983,7 @@ final class Model: ObservableObject {
     /// view's top-left: the click or the fingers) where it is, otherwise keeping the current centre.
     func zoom(to scale: Double, atFit point: CGPoint? = nil, centreOn uv: CGPoint? = nil) {
         guard current != nil, viewMode == .single else { return }
-        zoomFollow = .none; pendingSubjectZoom = false
+        zoomFollow = .none; pendingSubjectZoom = false; carryCentre = nil
         let fit = fitScale
         if scale <= fit + 1e-6 { unzoomAnimated(); return }
         unzoomGen += 1; unzooming = false                          // cancels an unzoom still animating
@@ -3000,7 +3023,7 @@ final class Model: ObservableObject {
             zoomState.scale = fit; zoomState.offset = .zero
             zoomed = true
         }
-        unzoomGen += 1; unzooming = false; zoomFollow = .none
+        unzoomGen += 1; unzooming = false; zoomFollow = .none; carryCentre = nil
         let old = zoomScale
         let new = min(max(old * (1 + magnification), fit), Model.maxZoom)
         let f = new / old
@@ -3040,11 +3063,21 @@ final class Model: ObservableObject {
 
     private var imagePixels: CGSize {
         let parts = imageSize.split(separator: "x").compactMap { Double($0) }
-        guard parts.count == 2 else { return CGSize(width: 6000, height: 4000) }
+        guard parts.count == 2 else {
+            // not read yet (just stepped onto it): the last photo's size, in this picture's shape — usually exact
+            // for photos from one camera, so a zoom carried over lands where it will stay
+            let long = max(lastPixels.width, lastPixels.height)
+            guard let p = preview, p.size.width > 0, p.size.height > 0 else { return lastPixels }
+            let a = p.size.width / p.size.height
+            return a >= 1 ? CGSize(width: long, height: (long / a).rounded()) : CGSize(width: (long * a).rounded(), height: long)
+        }
         // EXIF size is un-rotated; the preview tells us the orientation.
-        if let p = preview, (p.size.width > p.size.height) != (parts[0] > parts[1]) { return CGSize(width: parts[1], height: parts[0]) }
-        return CGSize(width: parts[0], height: parts[1])
+        let px = (preview.map { ($0.size.width > $0.size.height) != (parts[0] > parts[1]) } ?? false)
+            ? CGSize(width: parts[1], height: parts[0]) : CGSize(width: parts[0], height: parts[1])
+        lastPixels = px
+        return px
     }
+    private var lastPixels = CGSize(width: 6000, height: 4000)
 
     /// The render scale for a zoom: the next standard step up (so small zoom changes reuse the render), never above
     /// 100 % (beyond that the 100 % render is enlarged).
@@ -3073,7 +3106,7 @@ final class Model: ObservableObject {
     }
 
     func dragPan(_ t: CGSize) {
-        if !dragging { dragging = true; panStart = panOffset }
+        if !dragging { dragging = true; panStart = panOffset; zoomFollow = .none; carryCentre = nil }
         zoomState.offset = clampedPan(CGSize(width: panStart.width + t.width, height: panStart.height + t.height))
     }
 
