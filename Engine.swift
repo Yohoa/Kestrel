@@ -433,7 +433,37 @@ enum ClippingOverlay {
 enum BitmapPhoto {
     static let asShot: (temp: Float, tint: Float) = (6500, 0)
 
-    static func isBitmap(_ url: URL) -> Bool { bitmapExtensions.contains(url.pathExtension.lowercased()) }
+    /// A JPG / HEIF by its name, or one found inside a file named like a RAW (some phone backup apps save an
+    /// iPhone's JPEG or HEIC as .ARW / .DNG / .CR2). The RAW decoder took those but ignored the reduced size, so
+    /// every picture was decoded at full size: slow, and zooming stuttered. The contents are read off the main
+    /// thread the first time (the decode does that anyway); on the main thread an unread one counts as a RAW.
+    static func isBitmap(_ url: URL) -> Bool {
+        if bitmapExtensions.contains(url.pathExtension.lowercased()) { return true }
+        if let known = Sniffed.shared.get(url) { return known }
+        guard !Thread.isMainThread else { return false }
+        let b = sniff(url)
+        Sniffed.shared.set(url, b)
+        return b
+    }
+
+    /// JPEG (FF D8 FF) or HEIF / AVIF (an "ftyp" box with a still-image brand; Canon's CR3 is "crx " and stays RAW).
+    static func sniff(_ url: URL) -> Bool {
+        guard let d = Storage.head(url, bytes: 12), d.count >= 12 else { return false }
+        let b = [UInt8](d)
+        if b[0] == 0xFF, b[1] == 0xD8, b[2] == 0xFF { return true }
+        guard String(decoding: b[4..<8], as: UTF8.self) == "ftyp" else { return false }
+        let brand = String(decoding: b[8..<12], as: UTF8.self)
+        return ["heic", "heix", "hevc", "hevx", "heim", "heis", "hevm", "hevs", "mif1", "msf1", "avif", "avis"].contains(brand)
+    }
+
+    /// What `sniff` found per file, thread-safe.
+    final class Sniffed: @unchecked Sendable {
+        static let shared = Sniffed()
+        private var known: [URL: Bool] = [:]
+        private let lock = NSLock()
+        func get(_ u: URL) -> Bool? { lock.lock(); defer { lock.unlock() }; return known[u] }
+        func set(_ u: URL, _ b: Bool) { lock.lock(); known[u] = b; lock.unlock() }
+    }
 
     static func longSide(_ url: URL) -> Int? {
         guard let src = CGImageSourceCreateWithURL(url as CFURL, nil),

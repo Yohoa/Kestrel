@@ -60,6 +60,7 @@ struct PhotoMetadata {
 
     static func read(_ url: URL) -> PhotoMetadata {
         var m = PhotoMetadata()
+        _ = BitmapPhoto.isBitmap(url)                   // a JPEG / HEIC named like a RAW is found here, off the main thread
         if UserDefaults.standard.bool(forKey: undoStdAdjustKey) { m.stdAdjust = ExifInfo.sonyStdAdjust(url) }
         if !ScanIndex.shared.knownWithoutSidecar(url), let sc = Sidecar.load(for: url) {
             m.rating = sc.rating; m.label = sc.label

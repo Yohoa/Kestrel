@@ -2982,6 +2982,7 @@ final class Model: ObservableObject {
 
     static let zoomAnimation = Animation.spring(response: 0.3, dampingFraction: 0.9)
     private var unzoomGen = 0
+    private var zoomAnimEnds = Date.distantPast             // a zoom spring runs until then: no picture swap before
     private(set) var unzooming = false
 
     /// Shrinks the picture back to the fit size, then leaves zoom (instant when not zoomed).
@@ -3025,6 +3026,7 @@ final class Model: ObservableObject {
         let url = current
         let go = { [weak self] in
             guard let self, self.zoomed, self.current == url else { return }      // not if the photo changed meanwhile
+            self.zoomAnimEnds = Date().addingTimeInterval(0.4)    // ZoomLayerView's zoom-in spring is 0.35 s
             withAnimation(Model.zoomAnimation) { self.zoomState.scale = new; self.zoomState.offset = target }
             self.refreshZoom()
         }
@@ -3123,9 +3125,17 @@ final class Model: ObservableObject {
             guard let ci = d.render(look), let cg = Engine.cgImage(ci, look) else { return }
             let img = NSImage(cgImage: cg, size: NSSize(width: Double(cg.width) / scale, height: Double(cg.height) / scale))
             self?.post { [weak self] in
-                guard let self, self.current == url, self.zoomed, self.renderScale(for: self.zoomScale) == d.scale else { return }
-                self.zoomImage = img
-                self.zoomImageScale = Double(d.scale)
+                guard let self else { return }
+                // A render that is ready while the zoom is still animating waits for its end: swapping in a big
+                // picture (tens of MB to the GPU) mid-spring made it stutter — e.g. a JPEG, decoded far faster
+                // than a RAW, landed right in the middle.
+                let wait = self.zoomAnimEnds.timeIntervalSinceNow
+                let apply = { [weak self] in
+                    guard let self, self.current == url, self.zoomed, self.renderScale(for: self.zoomScale) == d.scale else { return }
+                    self.zoomImage = img
+                    self.zoomImageScale = Double(d.scale)
+                }
+                if wait > 0 { DispatchQueue.main.asyncAfter(deadline: .now() + wait) { MainActor.assumeIsolated(apply) } } else { apply() }
             }
         }
     }
