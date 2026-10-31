@@ -1407,22 +1407,47 @@ final class Model: ObservableObject {
         if !imageSize.isEmpty, preview != nil, !previewIsPlaceholder { carryCentre = nil }   // the real size and shape: done
     }
 
-    /// A zoom made by Z: changing photos goes back to fit at once (keeping a place that belongs to another photo
-    /// glitched), and zooms in again onto the new photo's subject once that photo is settled on, its picture is
-    /// rendered and its subject is known (the middle when it has none). Other zooms keep their place.
+    /// What a zoom does when the photo changes: `.subject` (made by Z) goes onto each photo's subject, `.middle` (⇧Z)
+    /// to its middle; `.none` (any other zoom, or one of those moved by hand) keeps its ratio and spot.
     enum ZoomFollow { case none, subject, middle }
     private var zoomFollow = ZoomFollow.none
-    private var followAfterFit = ZoomFollow.none            // what to zoom back in with on the new photo
     private(set) var pendingSubjectZoom = false
     private var settledOn: URL?                            // the photo `photoOpened` ran for
 
+    /// A photo change while zoomed: the new photo appears zoomed straight away, from its thumbnail (no blank frame,
+    /// no stop at fit). A normal zoom keeps its ratio and the same spot of the picture; Z goes onto the new photo's
+    /// subject when it is already known (read ahead), else stays on the same spot and glides there once found;
+    /// ⇧Z goes to the middle at the smart zoom.
+    private func zoomIntoNext(_ url: URL, from centre: CGPoint, follow: ZoomFollow) {
+        if filmThumbs.images[url] != nil { preview = filmThumbs.image(url, rot: currentState.rot); previewIsPlaceholder = true }
+        switch follow {
+        case .none:
+            carryCentre = centre
+        case .middle:
+            zoomState.scale = max(smartZoomScale, fitScale * 1.01)
+            carryCentre = CGPoint(x: 0.5, y: 0.5)
+        case .subject:
+            if contentAnalysisOn, let box = contentCache[contentKey(url, currentState.rot)]?.subject {
+                zoomState.scale = max(subjectScale(box), fitScale * 1.01)
+                carryCentre = CGPoint(x: box.midX, y: box.midY)
+            } else {
+                carryCentre = centre
+                pendingSubjectZoom = true
+            }
+        }
+        zoomFollow = follow
+        applyCarry()
+    }
+
+    /// Z's zoom on a photo whose subject wasn't known when it was stepped onto: glides there once found (once the
+    /// photo is settled on, so a held key doesn't swing the view about). With no subject it stays where it is.
     private func followSubject() {
-        let mode = followAfterFit
-        guard pendingSubjectZoom, !zoomed, viewMode == .single, let c = current, settledOn == c,
-              preview != nil, !previewIsPlaceholder, !imageSize.isEmpty, mode == .middle || !contentBusy else { return }
-        if mode == .subject, let box = contentInfo?.subject { zoom(to: subjectScale(box), centreOn: CGPoint(x: box.midX, y: box.midY)) }
-        else { zoom(to: smartZoomScale) }
-        zoomFollow = mode                                  // zoom() cleared it
+        guard pendingSubjectZoom, zoomed, zoomFollow == .subject, viewMode == .single, let c = current, settledOn == c,
+              !imageSize.isEmpty, !contentBusy else { return }
+        pendingSubjectZoom = false
+        guard let box = contentInfo?.subject else { return }
+        zoom(to: subjectScale(box), centreOn: CGPoint(x: box.midX, y: box.midY))
+        zoomFollow = .subject                              // zoom() cleared it
     }
 
     /// After a photo change while zoomed: the pan kept from the previous photo may lie past this one's edges
@@ -2612,8 +2637,8 @@ final class Model: ObservableObject {
         flushSettings()
         RenderScheduler.shared.bumpPhoto()                 // everything queued for the old photo is skipped at dequeue
         watchdogTask?.cancel()
-        if zoomed && zoomFollow != .none { followAfterFit = zoomFollow; unzoom(); pendingSubjectZoom = true }   // fit now, back in on this photo
-        else if zoomed { carryCentre = zoomCentre() }       // a normal zoom: same ratio, the same spot of the next photo
+        // zoomed: the next photo is shown zoomed at once (see `zoomIntoNext`), worked out from this one's place
+        let carriedZoom: (centre: CGPoint, follow: ZoomFollow)? = zoomed ? (zoomCentre(), zoomFollow) : nil
         current = url
         Model.ioCurrent.set(url)
         thumbs = [:]
@@ -2632,8 +2657,7 @@ final class Model: ObservableObject {
         guard let url else { exifLines = []; imageSize = ""; RenderScheduler.shared.setNeighbours([]); return }
         if let f = currentFolder { UserDefaults.standard.set(url.lastPathComponent, forKey: "last:" + f.path) }
         if let e = exifCache[url] { exifLines = e.lines; imageSize = e.size } else { exifLines = []; imageSize = "" }
-        if zoomed, filmThumbs.images[url] != nil { preview = filmThumbs.image(url, rot: currentState.rot); previewIsPlaceholder = true }   // no blank frame
-        if carryCentre != nil { applyCarry() }
+        if let z = carriedZoom { zoomIntoNext(url, from: z.centre, follow: z.follow) }
         settledOn = nil
         contentInfo = contentAnalysisOn ? contentCache[contentKey(url, currentState.rot)] : nil
         let waiting = readMetadataSoon(url)                // rating, label and saved look before the real render
@@ -2952,6 +2976,7 @@ final class Model: ObservableObject {
 
     func unzoom() {
         zoomed = false; zoomImage = nil; zoomImageScale = 0; unzooming = false; zoomFollow = .none
+        pendingSubjectZoom = false; carryCentre = nil
         pinchRender?.cancel(); unzoomGen += 1; RenderScheduler.shared.bumpZoom()
     }
 
