@@ -201,7 +201,7 @@ extension Model {
         case ("x", false): setRating(-1)
         case ("g", false): toggleGrid()
         case ("z", false): zoomToSubject()                                // the subject Vision found, else the middle
-        case ("z", true): toggleZoom()                                    // smart zoom on the middle
+        case ("z", true): smartZoomMiddle()                               // smart zoom on the middle
         case ("f", false): toggleFullScreen()
         case ("o", false): toggleOver()
         case ("u", false): toggleUnder()
