@@ -62,6 +62,39 @@ enum ContentAnalysis {
         return info
     }
 
+    // MARK: in the sidecar
+
+    /// The results are saved in the app's own namespace (Lightroom's keywords, dc:subject, are left alone):
+    /// arwexport:ContentLabels "Cat 83, Food 79" (name and confidence %), arwexport:Aesthetics "+0.41",
+    /// arwexport:Utility "True", arwexport:Subject "x,y,w,h" (0…1 from the top-left of the picture turned by
+    /// arwexport:ContentRotation). Read back, they spare the analysis next time.
+    static func changes(_ i: ContentInfo, rot: Int) -> [XMPChange] {
+        [
+            XMPChange(tag: "arwexport:ContentVersion", value: "1"),
+            XMPChange(tag: "arwexport:ContentLabels", value: i.labels.map { "\($0.name) \(Int(($0.confidence * 100).rounded()))" }.joined(separator: ", ")),
+            XMPChange(tag: "arwexport:Aesthetics", value: i.aesthetics.map { String(format: "%+.2f", $0) }),
+            XMPChange(tag: "arwexport:Utility", value: i.utility ? "True" : nil),
+            XMPChange(tag: "arwexport:Subject", value: i.subject.map { String(format: "%.3f,%.3f,%.3f,%.3f", $0.minX, $0.minY, $0.width, $0.height) }),
+            XMPChange(tag: "arwexport:ContentRotation", value: rot == 0 ? nil : String(rot)),
+        ]
+    }
+
+    /// What `changes` saved, and for which turn; nil when the sidecar has none.
+    static func saved(in text: String) -> (info: ContentInfo, rot: Int)? {
+        guard XMPEdit.value(of: "arwexport:ContentVersion", in: text) != nil else { return nil }
+        var i = ContentInfo()
+        i.labels = (XMPEdit.value(of: "arwexport:ContentLabels", in: text) ?? "").components(separatedBy: ", ").compactMap { part in
+            guard let sp = part.lastIndex(of: " "), let c = Float(part[part.index(after: sp)...]) else { return nil }
+            return (String(part[..<sp]), c / 100)
+        }
+        i.aesthetics = XMPEdit.value(of: "arwexport:Aesthetics", in: text).flatMap { Float($0) }
+        i.utility = XMPEdit.value(of: "arwexport:Utility", in: text) == "True"
+        if let s = XMPEdit.value(of: "arwexport:Subject", in: text)?.split(separator: ",").compactMap({ Double($0) }), s.count == 4 {
+            i.subject = CGRect(x: s[0], y: s[1], width: s[2], height: s[3])
+        }
+        return (i, XMPEdit.value(of: "arwexport:ContentRotation", in: text).flatMap { Int($0) } ?? 0)
+    }
+
     /// "sky_scene" → "Sky scene"
     static func pretty(_ id: String) -> String {
         let s = id.replacingOccurrences(of: "_", with: " ")

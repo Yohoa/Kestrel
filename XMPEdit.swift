@@ -526,6 +526,7 @@ struct Sidecar {
     var text: String
     var develop: PhotoState?    // settings this app saved (arwexport: namespace), if any
     var orientation: Int?       // tiff:Orientation (FastRawViewer, Lightroom, or this app's rotation)
+    var content: (info: ContentInfo, rot: Int)? { ContentAnalysis.saved(in: text) }
 
     static func url(for raw: URL) -> URL { XMPFile.url(for: raw) }
 

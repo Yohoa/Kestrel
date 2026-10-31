@@ -197,7 +197,7 @@ struct SettingsView: View {
             }
             Section("Content analysis") {
                 Toggle("Recognise what's in the photo", isOn: $m.contentAnalysisOn)
-                Text("For the photo on screen only, on this Mac (Apple's Vision, on the Neural Engine): what it shows, an aesthetics score (macOS 15+) and its main subject, in the Content panel (⇧F3). ⇧Z zooms onto the subject. Nothing is written to the .xmp.")
+                Text("For the photo on screen only, on this Mac (Apple's Vision, on the Neural Engine): what it shows, an aesthetics score (macOS 15+) and its main subject, in the Content panel (⇧F3). ⇧Z zooms onto the subject. The results are saved in the photo's .xmp and read back from there.")
                     .font(.caption).foregroundStyle(.secondary)
             }
             Section("Exposure") {

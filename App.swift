@@ -423,7 +423,8 @@ final class Model: ObservableObject {
             else { hiddenPanels.insert(Panel.content.rawValue); contentInfo = nil; contentBusy = false }
         }
     }
-    private let contentCache = LRU<String, ContentInfo>(limit: 64)
+    private let contentCache = LRU<String, ContentInfo>(limit: 512)
+    private var contentSaved: Set<String> = []          // analyses already in the photo's .xmp (photo#turn)
     private let contentQueue = DispatchQueue(label: "kestrel.content", qos: .utility)
     @Published var imageSize = ""
 
@@ -1319,13 +1320,27 @@ final class Model: ObservableObject {
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {
                     guard let self else { return }
-                    if let info { self.contentCache[key] = info }
+                    if let info { self.contentCache[key] = info; self.saveContent(info, for: c, rot: rot) }
                     guard self.current == c, self.currentState.rot == rot else { return }
                     self.contentInfo = info
                     self.contentBusy = false
                 }
             }
         }
+    }
+
+    /// Writes an analysis into the photo's .xmp (arwexport: tags only), once per photo and turn.
+    private func saveContent(_ info: ContentInfo, for url: URL, rot: Int) {
+        let key = contentKey(url, rot)
+        guard contentSaved.insert(key).inserted else { return }
+        let changes = ContentAnalysis.changes(info, rot: rot)
+        SidecarWriter.shared.submit({ try XMPFile.write(changes, for: url) }, completion: { [weak self] r in
+            MainActor.assumeIsolated {
+                guard let self else { return }
+                if case .failure(let e) = r { self.contentSaved.remove(key); self.status = "Content not saved to XMP — \(e.localizedDescription)" }
+                else if self.current == url { self.loadXMPPanel() }
+            }
+        })
     }
 
     /// ⇧Z: zoom onto the main subject Vision found (fit again when zoomed).
@@ -1704,6 +1719,7 @@ final class Model: ObservableObject {
             var start = PhotoState(); start.ev = m.exposure ?? 0; start.rot = m.rot
             knownRot[u] = m.rot == 0 ? nil : m.rot
             stdAdjustEV[u] = m.stdAdjust == 0 ? nil : m.stdAdjust
+            if let c = m.content { contentCache[contentKey(u, c.rot)] = c.info; contentSaved.insert(contentKey(u, c.rot)) }
             // Exposure Std. Adjust undone, unless the photo already has an exposure from this app, FRV or Lightroom
             if m.stdAdjust != 0, m.develop == nil, (m.exposure ?? 0) == 0 { start.ev = -m.stdAdjust; stdFixPending.insert(u) }
             else { stdFixPending.remove(u) }
