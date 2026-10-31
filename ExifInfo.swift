@@ -99,6 +99,7 @@ extension ExifInfo {
             guard let r = d.range(of: Data("Exif\0\0".utf8)) else { return nil }
             d = d.subdata(in: r.upperBound..<d.count)
         }
+        guard d.count >= 16 else { return nil }
         let b = [UInt8](d)
         let little: Bool
         switch (b[0], b[1]) { case (0x49, 0x49): little = true; case (0x4D, 0x4D): little = false; default: return nil }

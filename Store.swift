@@ -61,8 +61,9 @@ struct PhotoMetadata {
         var m = PhotoMetadata()
         if UserDefaults.standard.bool(forKey: undoStdAdjustKey) { m.stdAdjust = ExifInfo.sonyStdAdjust(url) }
         if !ScanIndex.shared.knownWithoutSidecar(url), let sc = Sidecar.load(for: url) {
-            m.rating = sc.rating; m.label = sc.label; m.develop = sc.develop; m.exposure = sc.exposure
-            if let o = sc.orientation { m.rot = Orientation.rot(sidecarCode: o, camera: Orientation.camera(url)) }   // header read only then
+            m.rating = sc.rating; m.label = sc.label
+            if sc.belongs(to: url) { m.develop = sc.develop; m.exposure = sc.exposure }
+            if sc.belongs(to: url), let o = sc.orientation { m.rot = Orientation.rot(sidecarCode: o, camera: Orientation.camera(url)) }   // header read only then
             m.develop?.rot = m.rot
         }
         let exif = ExifInfo.capture(url)

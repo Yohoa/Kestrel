@@ -446,9 +446,11 @@ enum XMPFile {
     /// Saves the app's develop settings (arwexport: namespace only) into the sidecar.
     /// The sidecar copied next to an export. The exported picture is already turned, so a tiff:Orientation in the
     /// copy would turn it a second time in an app that reads it: that tag is left out.
+    /// The same goes for this app's develop settings: the export has them baked in, and Kestrel opens HEIC files,
+    /// so a copy that kept them would show the look and exposure a second time.
     static func copyForExport(_ sc: Sidecar, to x: URL) {
-        guard sc.orientation != nil,
-              let t = XMPEdit.apply([XMPChange(tag: "tiff:Orientation", value: nil)], to: sc.text, touchDate: nil) else {
+        let strip = DevelopXMP.removalChanges + [XMPChange(tag: "tiff:Orientation", value: nil)]
+        guard let t = XMPEdit.apply(strip, to: sc.text, touchDate: nil) else {
             try? FileManager.default.copyItem(at: sc.url, to: x); return
         }
         try? Data(t.utf8).write(to: x, options: .atomic)
@@ -483,7 +485,13 @@ enum XMPFile {
         let existing = read(raw)
         let base = existing?.text ?? XMPEdit.minimalDocument(ext: raw.pathExtension)
         var changes = changes
-        if let rot, let o = orientationChange(rot: rot, in: base, raw: raw) { changes.append(o) }
+        // an export's copy of its RAW's sidecar, edited here for the first time: it becomes this file's own, and the
+        // RAW's settings in it (already baked into the picture) go first, so they can't come back
+        if let e = XMPEdit.value(of: "photoshop:SidecarForExtension", in: base), !e.isEmpty, e.lowercased() != raw.pathExtension.lowercased() {
+            changes = DevelopXMP.removalChanges + [XMPChange(tag: "tiff:Orientation", value: nil),
+                                                   XMPChange(tag: "photoshop:SidecarForExtension", value: raw.pathExtension.uppercased())] + changes
+        }
+        if let rot, let o = orientationChange(rot: rot, in: XMPEdit.apply(changes, to: base, touchDate: nil) ?? base, raw: raw) { changes.append(o) }
         guard let edited = XMPEdit.apply(changes, to: base) else {
             throw WriteError(message: "Refused: \(url(for: raw).lastPathComponent) is not well-formed XML or the edit would break it")
         }
@@ -520,6 +528,13 @@ struct Sidecar {
     var orientation: Int?       // tiff:Orientation (FastRawViewer, Lightroom, or this app's rotation)
 
     static func url(for raw: URL) -> URL { XMPFile.url(for: raw) }
+
+    /// False when the sidecar says it was written for another file type (photoshop:SidecarForExtension "ARW" next
+    /// to a HEIC): an export's copy of its RAW's sidecar, whose settings are already baked into the picture.
+    func belongs(to photo: URL) -> Bool {
+        guard let e = XMPEdit.value(of: "photoshop:SidecarForExtension", in: text), !e.isEmpty else { return true }
+        return e.lowercased() == photo.pathExtension.lowercased()
+    }
 
     static func load(for raw: URL) -> Sidecar? {
         guard let (s, _) = XMPFile.read(raw) else { return nil }

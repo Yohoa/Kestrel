@@ -790,7 +790,7 @@ final class Model: ObservableObject {
         // the grid shows no big picture: let the decoded photos go (a step back to the single view decodes the one
         // on screen again, ~0.1 s); fast browsing keeps them
         if viewMode == .grid, !fastBrowsing { bakeCache.removeAll() }
-        if viewMode == .single { scheduleRefresh(); photoOpened() }
+        if viewMode == .single { scheduleRefresh(); schedulePhotoOpened() }
     }
 
     private var refreshTask: Task<Void, Never>?
@@ -826,11 +826,11 @@ final class Model: ObservableObject {
         if let c = frvCache[url] { return c }
         if let i = libIndex[url], !library[i].metadataRead { return PhotoState() }
         var s = PhotoState()
-        if let sc = Sidecar.load(for: url) {                // after an XMP edit cleared the cache
+        if let sc = Sidecar.load(for: url), sc.belongs(to: url) {     // after an XMP edit cleared the cache
             if let d = sc.develop { s = d; savedDevelop.insert(url) }
             else { s.ev = sc.exposure ?? 0 }
             if sc.develop == nil, (sc.exposure ?? 0) == 0, let a = stdAdjustEV[url] { s.ev = -a }
-            if let o = sc.orientation { s.rot = Orientation.rot(sidecarCode: o, camera: Orientation.camera(url)) }
+            s.rot = knownRot[url] ?? 0                       // the XMP panel doesn't change it; no RAW read on the main thread
         }
         frvCache[url] = s
         return s
@@ -839,6 +839,8 @@ final class Model: ObservableObject {
     /// Settings ▸ Exposure ▸ Undo Exposure Std. Adjust: what the camera recorded (MakerNote 0x202D), for photos where
     /// it isn't 0, and the ones whose opposite exposure is shown but not saved yet.
     private var stdAdjustEV: [URL: Float] = [:]
+    /// The turn each photo's sidecar had when read (non-zero only).
+    private var knownRot: [URL: Int] = [:]
     private var stdFixPending: Set<URL> = []
 
     /// Photos whose sidecar had this app's develop settings when read: their first undo puts those back.
@@ -1089,9 +1091,10 @@ final class Model: ObservableObject {
         let c = currentState
         let bitmap = current.map(BitmapPhoto.isBitmap) ?? false
         let g = "apply-" + UUID().uuidString                    // one undo step for both edits
-        edit(scope.filter { BitmapPhoto.isBitmap($0) == bitmap }, group: g) { $0 = c }
-        edit(scope.filter { BitmapPhoto.isBitmap($0) != bitmap }, group: g) { s in       // the other kind keeps its own WB
-            let (t, ti) = (s.temp, s.tint); s = c; s.temp = t; s.tint = ti
+        // each photo keeps its own turn; the other kind also keeps its own WB
+        edit(scope.filter { BitmapPhoto.isBitmap($0) == bitmap }, group: g) { s in let r = s.rot; s = c; s.rot = r }
+        edit(scope.filter { BitmapPhoto.isBitmap($0) != bitmap }, group: g) { s in
+            let (t, ti, r) = (s.temp, s.tint, s.rot); s = c; s.temp = t; s.tint = ti; s.rot = r
         }
         status = "Applied current settings to \(scope.count) photo(s)"
         refreshAll()
@@ -1243,6 +1246,19 @@ final class Model: ObservableObject {
         notify(.lookSaved, "\(name) → \(c.lastPathComponent)", icon: "checkmark.circle.fill")
     }
 
+    /// Waits until stepping stops (a held key or Page Down passes many photos), then `photoOpened` for the photo
+    /// stopped on: a photo only passed through gets no sidecar write.
+    private var openedTask: Task<Void, Never>?
+    func schedulePhotoOpened() {
+        openedTask?.cancel()
+        let url = current
+        openedTask = Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 400_000_000)
+            guard !Task.isCancelled, let self, self.current == url else { return }
+            self.photoOpened()
+        }
+    }
+
     /// The photo on screen is known (its metadata read): the things that happen on opening a photo.
     func photoOpened() {
         saveStdAdjustFix()
@@ -1271,7 +1287,7 @@ final class Model: ObservableObject {
             if saved != k, let id = lookID(forKey: saved) { notify(.lookKept, "Kept saved look · \(look(id).title)", icon: "lock.fill") }
             return
         }
-        edit([c]) { $0.look = k }
+        edit([c], group: "apply-mode-look") { $0.look = k }       // looks saved while browsing: one undo step
     }
 
     /// The look to show for the current photo, by the LUT panel's mode.
@@ -1531,7 +1547,7 @@ final class Model: ObservableObject {
         states = [:]
         undoneToNothing = []
         frvCache = [:]
-        stdAdjustEV = [:]; stdFixPending = []
+        stdAdjustEV = [:]; stdFixPending = []; knownRot = [:]
         savedDevelop = []
         recomputeWork?.cancel(); recomputeWork = nil
         lastAppliedSeq = [:]
@@ -1614,6 +1630,7 @@ final class Model: ObservableObject {
             p.metadataRead = true
             library[i] = p
             var start = PhotoState(); start.ev = m.exposure ?? 0; start.rot = m.rot
+            knownRot[u] = m.rot == 0 ? nil : m.rot
             stdAdjustEV[u] = m.stdAdjust == 0 ? nil : m.stdAdjust
             // Exposure Std. Adjust undone, unless the photo already has an exposure from this app, FRV or Lightroom
             if m.stdAdjust != 0, m.develop == nil, (m.exposure ?? 0) == 0 { start.ev = -m.stdAdjust; stdFixPending.insert(u) }
@@ -1626,7 +1643,7 @@ final class Model: ObservableObject {
         // the current photo's saved look just arrived (from whichever read got there first): render it now
         if let c = current, landedURLs.contains(c) {
             syncLookFromState()
-            photoOpened()
+            schedulePhotoOpened()
             if viewMode == .single { refreshAll() }
         }
         // background batches land many times a second while a big folder is read: one recompute per 0.1 s
@@ -2456,7 +2473,7 @@ final class Model: ObservableObject {
         if let e = exifCache[url] { exifLines = e.lines; imageSize = e.size } else { exifLines = []; imageSize = "" }
         let waiting = readMetadataSoon(url)                // rating, label and saved look before the real render
         syncLookFromState()
-        if !waiting { photoOpened() }
+        if !waiting { schedulePhotoOpened() }
         loadXMPPanel()
         if viewMode == .single {
             showPlaceholder(url)
@@ -2931,8 +2948,10 @@ final class Model: ObservableObject {
         let w = img.size.width * s, h = img.size.height * s
         let u = (point.x - (vw - w) / 2) / w, v = (point.y - (vh - h) / 2) / h
         guard (0...1).contains(u), (0...1).contains(v) else { return }
-        pickingWB = false
         let rot = currentState.rot
+        // right after a turn the picture on screen may still be the old one: its shape would map the click wrongly
+        guard !previewIsPlaceholder, renderedKey?.photo.adj.rot == rot else { status = "Wait for the picture, then pick again"; return }
+        pickingWB = false
         Task.detached(priority: .userInitiated) { [weak self] in
             let r = Decoded.pickNeutral(url, u: u, vFromTop: v, rot: rot)
             await MainActor.run {
@@ -3045,8 +3064,11 @@ final class Model: ObservableObject {
         status = "Copy to the clipboard stopped"
     }
 
+    private var clipID = UUID()                        // the copy running now: an older one that finishes late does nothing
+
     func copyImageToClipboard() {
         clipTask?.cancel()
+        let id = UUID(); clipID = id
         clipFinishedWork?.cancel(); clipFinished = nil
         let many = viewMode == .grid && selection.count > 1
         let urls = many ? files.filter(selection.contains) : (current.map { [$0] } ?? [])
@@ -3076,7 +3098,7 @@ final class Model: ObservableObject {
                 if many {
                     let n = k + 1
                     await MainActor.run {
-                        guard !Task.isCancelled else { return }
+                        guard !Task.isCancelled, self?.clipID == id else { return }
                         self?.clipProgress = (n, jobs.count)
                         self?.status = "Rendering for the clipboard… \(n) of \(jobs.count)"
                     }
@@ -3085,7 +3107,7 @@ final class Model: ObservableObject {
             if Task.isCancelled { return }
             let rendered = done
             await MainActor.run {
-                guard let self else { return }
+                guard let self, self.clipID == id, !Task.isCancelled else { return }
                 if !many { self.clipProgress = nil }        // several: the capsule turns into "done" below
                 self.clipTask = nil
                 guard !rendered.isEmpty else {

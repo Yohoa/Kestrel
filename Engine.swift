@@ -582,7 +582,7 @@ enum Orientation {
         guard q != 0 else { return cg }
         let w = q == 2 ? cg.width : cg.height, h = q == 2 ? cg.height : cg.width
         guard let ctx = CGContext(data: nil, width: w, height: h, bitsPerComponent: 8, bytesPerRow: 0,
-                                  space: cg.colorSpace ?? CGColorSpace(name: CGColorSpace.sRGB)!,
+                                  space: cg.colorSpace.flatMap { $0.model == .rgb ? $0 : nil } ?? CGColorSpace(name: CGColorSpace.sRGB)!,
                                   bitmapInfo: CGImageAlphaInfo.premultipliedLast.rawValue) else { return nil }
         // CG's origin is bottom-left: a clockwise turn of the picture is a negative angle here
         ctx.translateBy(x: CGFloat(w) / 2, y: CGFloat(h) / 2)
